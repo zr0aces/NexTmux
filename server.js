@@ -345,13 +345,13 @@ function sendWaitingAlert(id, detection, now = Date.now()) {
       sessionStateManager.markNotification(w, "skipped_debounce", now);
     } else {
       sessionStateManager.markNotification(w, "failed", now);
-      console.warn(`Telegram waiting alert failed for ${w.sessionName}: ${result.error || "unknown_error"}`);
+      console.warn("Telegram waiting alert failed", String(w.sessionName), String(result.error || "unknown_error"));
     }
     broadcastMonitorMeta(id);
   }).catch((err) => {
     sessionStateManager.markNotification(w, "failed", now);
     broadcastMonitorMeta(id);
-    console.warn(`Telegram waiting alert exception for ${w.sessionName}:`, err?.message || err);
+    console.warn("Telegram waiting alert exception", String(w.sessionName), String(err?.message || err));
   });
 }
 
