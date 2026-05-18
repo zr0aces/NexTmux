@@ -16,13 +16,13 @@ The supervisor actively monitors active tmux panes by capturing and scanning sta
 
 ## ⚡ Auto Mode
 
-Auto Mode enables TmuxHub to automatically respond with **"y"** (yes) whenever a worker transitions into the **Waiting** state. This allows long-running AI agents to continue without manual intervention.
+Auto Mode enables TmuxHub to automatically respond when a worker transitions into the **Waiting** state. By default it sends **`y`** (yes), and when list-style prompts include an explicit **`1. yes`** option, it selects that option by sending **`1`**.
 
 ### Enabling Auto Mode from the Web UI
 
 Each worker card has an **⚡ Auto** button next to the 👀 AI Monitor toggle in the card header actions bar:
 
-- **⚡ Auto** (amber/yellow) — Auto Mode is **enabled**: the server will automatically send `y` when a prompt is detected.
+- **⚡ Auto** (amber/yellow) — Auto Mode is **enabled**: the server sends `y` for standard prompts, and sends `1` when list prompts show `1. yes`.
 - **⚡ Manual** (dimmed) — Auto Mode is **disabled**: prompts require manual user input.
 
 Click the button to toggle Auto Mode on or off per worker at any time.
@@ -31,7 +31,7 @@ Click the button to toggle Auto Mode on or off per worker at any time.
 > Auto Mode operates independently of the AI Monitor toggle. The AI Monitor must be enabled for wait-state detection to trigger automatic responses.
 
 > [!WARNING]
-> Auto Mode unconditionally sends `y` for all detected wait states, including confirmation and approval prompts. Use with care in workflows where selective approval is important.
+> Auto Mode responds automatically for detected wait states (`y` for standard prompts, `1` for list prompts that include `1. yes`), including confirmation and approval prompts. Use with care in workflows where selective approval is important.
 
 ---
 

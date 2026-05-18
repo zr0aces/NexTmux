@@ -73,7 +73,7 @@ function ensureCard(id, cwd, status, logs, cmd, reason, monitorMeta) {
         '<span class="badge' + (status === 'stopped' ? ' stopped' : '') + (status === 'completed' ? ' completed' : '') + '" id="badge-' + id + '">' + status + '</span>' +
         '<div class="ai-monitor-wrap">' +
           '<button class="ai-monitor-toggle" id="ai-monitor-' + id + '" title="Toggle AI Monitor">👀 On</button>' +
-          '<button class="auto-mode-toggle" id="auto-mode-' + id + '" title="Toggle Auto Mode (auto-respond yes to prompts)">⚡ Auto</button>' +
+          '<button class="auto-mode-toggle" id="auto-mode-' + id + '" title="Toggle Auto Mode (auto-respond yes, or 1 for list prompts)">⚡ Auto</button>' +
           '<div class="ai-telemetry-tooltip" id="tooltip-' + id + '">' +
             '<div class="tooltip-title">🧠 AI Supervision</div>' +
             '<div class="tooltip-line" id="meta-activity-' + id + '">Activity: -</div>' +
@@ -383,7 +383,7 @@ function updateMonitorMeta(id, meta) {
     el.className = 'auto-mode-toggle' + (isAuto ? ' enabled' : ' disabled');
   });
   document.querySelectorAll('#meta-automode-' + id).forEach(el => {
-    el.textContent = 'Auto Mode: ' + (meta.autoMode === true ? 'On (auto-respond yes)' : 'Off');
+    el.textContent = 'Auto Mode: ' + (meta.autoMode === true ? 'On (yes / 1 for list prompts)' : 'Off');
   });
 }
 

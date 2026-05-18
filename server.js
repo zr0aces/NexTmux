@@ -216,6 +216,12 @@ function inferExitReason(w, fallback) {
   return fallback || "Session exited (reason unknown).";
 }
 
+function resolveAutoModeResponse(detection) {
+  const excerpt = String(detection?.excerpt || "");
+  const hasListYesOption = /(?:^|\n)\s*1\s*[\].):]\s*yes\b/im.test(excerpt);
+  return hasListYesOption ? "1" : "y";
+}
+
 // Well-known infrastructure service ports — excluded from preview detection to avoid false positives
 const EXCLUDED_PORTS = new Set([
   3306,  // MySQL
@@ -539,7 +545,7 @@ function pollOutput(id) {
   }
 
   if (nextState === "waiting" && stateChanged && w.autoMode) {
-    sendInput(id, "y");
+    sendInput(id, resolveAutoModeResponse(inspect.detection));
   }
 
   broadcastMonitorMeta(id);
