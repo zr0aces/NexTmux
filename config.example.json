@@ -1,8 +1,8 @@
 {
-  "basePath": "/Users/yourname/Desktop/",
+  "basePath": "/home/youruser/projects",
   "favorites": [
-    "/Users/yourname/Desktop/my-project-1",
-    "/Users/yourname/Desktop/my-project-2"
+    "/home/youruser/projects/my-project-1",
+    "/home/youruser/projects/my-project-2"
   ],
   "defaultCommand": "claude",
   "tunnel": {
