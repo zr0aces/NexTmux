@@ -130,7 +130,13 @@ function tmuxExec(...args) {
 
 function loadConfig() {
   const configPath = path.join(__dirname, "config.json");
-  return fs.existsSync(configPath) ? JSON.parse(fs.readFileSync(configPath, "utf8")) : {};
+  if (!fs.existsSync(configPath)) return {};
+  try {
+    if (!fs.statSync(configPath).isFile()) return {};
+    return JSON.parse(fs.readFileSync(configPath, "utf8"));
+  } catch {
+    return {};
+  }
 }
 
 function toBool(value, fallback = false) {
@@ -322,6 +328,7 @@ function initializeWorkerMonitorState(worker) {
   worker.lastPromptExcerpt = worker.lastPromptExcerpt || null;
   worker.lastNotificationAt = worker.lastNotificationAt || null;
   worker.notificationStatus = worker.notificationStatus || null;
+  worker.aiMonitorEnabled = worker.aiMonitorEnabled !== undefined ? worker.aiMonitorEnabled : monitorConfig.enabled;
   sessionStateManager.hydrateWorker(worker);
 }
 
@@ -482,13 +489,15 @@ function pollOutput(id) {
   }
 
   const now = Date.now();
-  const inspect = watcherEngine.inspect({
-    output,
-    previousOutput: lastCapture[id],
-    currentState: w.aiState || "running",
-    lastChangeTime: w.lastChangeTime,
-    now,
-  });
+  const inspect = w.aiMonitorEnabled && monitorConfig.enabled
+    ? watcherEngine.inspect({
+        output,
+        previousOutput: lastCapture[id],
+        currentState: w.aiState || "running",
+        lastChangeTime: w.lastChangeTime,
+        now,
+      })
+    : { changed: false, nextState: null, detection: null };
 
   // Output unchanged — pending port detection retry
   if (!inspect.changed) {
@@ -799,6 +808,17 @@ const server = http.createServer(async (req, res) => {
       return json(res, 200, { ok: true });
     }
     return json(res, 200, { ok: false });
+  }
+
+  if (method === "POST" && url === "/api/toggle-ai-monitor") {
+    const { ok, body } = await parseBody(req);
+    if (!ok || !body) return json(res, 400, { error: "invalid request body" });
+    const { id } = body;
+    const w = workers.get(id);
+    if (!w) return json(res, 404, { ok: false });
+    const enabled = sessionStateManager.toggleAiMonitor(w);
+    broadcast({ type: "monitorMeta", id, ...getMonitorMeta(w) });
+    return json(res, 200, { ok: true, enabled });
   }
 
   if (method === "GET" && url === "/api/git-diff") {

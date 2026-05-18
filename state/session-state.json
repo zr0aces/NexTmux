@@ -1,0 +1,12 @@
+{
+  "hausecho": {
+    "lastActivityAt": "2026-05-18T14:59:18.668Z",
+    "waitingState": "idle",
+    "lastMatchedPattern": null,
+    "lastPromptExcerpt": null,
+    "lastNotificationAt": null,
+    "notificationStatus": null,
+    "tokenResetAt": null,
+    "aiMonitorEnabled": true
+  }
+}

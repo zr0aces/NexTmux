@@ -77,6 +77,7 @@ function ensureCard(id, cwd, status, logs, cmd, reason, monitorMeta) {
       '<span id="meta-pattern-' + id + '">Prompt: -</span>' +
       '<span id="meta-notify-' + id + '">Notify: -</span>' +
       '<span id="meta-reset-' + id + '" style="display:none">Reset: -</span>' +
+      '<button class="ai-monitor-toggle" id="ai-monitor-' + id + '" title="Toggle AI Monitor">👀 On</button>' +
     '</div>' +
     '<div class="logs" id="logs-' + id + '"></div>' +
     '<div class="input-row" id="input-row-' + id + '"' + (status === 'stopped' || status === 'completed' ? ' style="display:none"' : '') + '>' +
@@ -160,12 +161,14 @@ function bindCard(id, root) {
   const killBtn = q('#kill-' + id);
   const sendBtn = q('#send-' + id);
   const inp = q('#inp-' + id);
+  const aiMonitorBtn = q('#ai-monitor-' + id);
 
   const diffBtn = q('#diff-' + id);
   if (diffBtn) diffBtn.addEventListener('click', () => openGitDiff(id));
 
   if (killBtn) killBtn.addEventListener('click', () => killWorker(id));
   if (sendBtn) sendBtn.addEventListener('click', () => sendInput(id));
+  if (aiMonitorBtn) aiMonitorBtn.addEventListener('click', () => toggleAiMonitor(id));
   if (inp) {
     // Workaround for Chrome IME bug: pressing Enter during CJK composition duplicates the last character.
     // While composing, pass Enter through to the IME; send the input only on compositionend.
@@ -358,6 +361,11 @@ function updateMonitorMeta(id, meta) {
       el.style.display = 'none';
     }
   });
+  document.querySelectorAll('#ai-monitor-' + id).forEach(el => {
+    const isEnabled = meta.aiMonitorEnabled !== false;
+    el.textContent = (isEnabled ? '👀 On' : '👁 Off');
+    el.className = 'ai-monitor-toggle' + (isEnabled ? ' enabled' : ' disabled');
+  });
 }
 
 function removeWorker(id) {
@@ -425,6 +433,15 @@ function sendInput(id) {
 function killWorker(id) {
   if (!confirm('Stop Worker #' + id + '?')) return;
   apiPost('/api/kill', { id });
+}
+
+function toggleAiMonitor(id) {
+  apiPost('/api/toggle-ai-monitor', { id })
+    .then(r => r.json().catch(() => ({})).then(d => ({ ok: r.ok, d })))
+    .then(({ ok }) => {
+      if (!ok) console.error('Failed to toggle AI monitor');
+    })
+    .catch(e => console.error('Error toggling AI monitor:', e));
 }
 
 function spawnSession() {

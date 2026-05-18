@@ -27,7 +27,7 @@ Contributions and bug reports are very welcome.
 - **tmux session scanning** — auto-detect and attach to existing sessions
 - **Tab / Split layout** — Tab mode for focus, Split mode for side-by-side
 - **Favorites & recent paths** — quick access to frequently used directories
-- **Password auth + external tunnels** — Cloudflare (recommended) or ngrok for remote access
+- **Password auth + external tunnels** — Cloudflare tunnel for remote access
 - **Adaptive terminal size** — tmux resizes to match your screen
 - **Keyboard shortcuts** — Esc, Shift+Tab, Ctrl+C, arrow keys forwarded to active worker
 
@@ -36,8 +36,7 @@ Contributions and bug reports are very welcome.
 - [Node.js](https://nodejs.org) 20+
 - [tmux](https://github.com/tmux/tmux)
 - Optional for remote access:
-  - [cloudflared](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/) (recommended)
-  - [ngrok](https://ngrok.com)
+  - [cloudflared](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/)
 
 ## Deployment & Setup
 
@@ -171,15 +170,6 @@ Optional Discord notification:
 ```env
 DISCORD_WEBHOOK=https://discord.com/api/webhooks/your/webhook-url
 ```
-
-### ngrok (manual tunnel)
-
-```bash
-ngrok config add-authtoken <your-token>
-ngrok http 8081
-```
-
-Open the generated `https://...ngrok...` URL.
 
 ## Usage (new user quick guide)
 

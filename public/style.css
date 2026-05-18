@@ -438,6 +438,42 @@ header h1 {
   max-width: 33%;
 }
 
+.ai-monitor-toggle {
+  background: none;
+  border: 1px solid #30363d;
+  color: #58a6ff;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 10px;
+  cursor: pointer;
+  transition: all 0.2s;
+  white-space: nowrap;
+  margin-left: auto;
+}
+
+.ai-monitor-toggle:hover {
+  border-color: #58a6ff;
+  background: #1f6feb22;
+}
+
+.ai-monitor-toggle.enabled {
+  color: #3fb950;
+  border-color: #3fb950;
+}
+
+.ai-monitor-toggle.enabled:hover {
+  background: #3fb95022;
+}
+
+.ai-monitor-toggle.disabled {
+  color: #f85149;
+  border-color: #f85149;
+}
+
+.ai-monitor-toggle.disabled:hover {
+  background: #f8514922;
+}
+
 .badge {
   font-size: 11px;
   padding: 2px 7px;
