@@ -6,6 +6,66 @@ If you find it useful, feel free to give it a star on GitHub!
 
 ---
 
+## 📸 Screenshots
+
+### Desktop
+
+| Login | Dashboard |
+|-------|-----------|
+| ![Login – Desktop](public/screenshots/login-desktop.png) | ![Dashboard – Desktop](public/screenshots/dashboard-desktop.png) |
+
+### Mobile
+
+| Login | Dashboard |
+|-------|-----------|
+| ![Login – Mobile](public/screenshots/login-mobile.png) | ![Dashboard – Mobile](public/screenshots/dashboard-mobile.png) |
+
+---
+
+## 🖥️ Tmux Usage
+
+TmuxHub uses **tmux** under the hood to create and manage isolated terminal sessions.
+
+### Attach to a running session
+
+Every worker spawned from the dashboard corresponds to a named tmux session (`term-<id>`). You can attach to it directly from your terminal:
+
+```bash
+# List all TmuxHub sessions
+tmux ls | grep term-
+
+# Attach to a specific worker (e.g. worker id 1)
+tmux attach -t term-1
+
+# Detach and return to TmuxHub without stopping the session
+# (inside tmux) press: Ctrl+B  then  D
+```
+
+### Common tmux commands while attached
+
+| Action | Keys |
+|--------|------|
+| Detach from session | `Ctrl+B` → `D` |
+| Scroll up in output | `Ctrl+B` → `[` (then arrow keys; `Q` to quit) |
+| Kill/close session | `exit` or `Ctrl+D` in the shell |
+
+### Manual session management
+
+```bash
+# Create a new session manually (TmuxHub will pick it up on reload)
+tmux new-session -d -s term-5 -c ~/projects "claude"
+
+# Send a keystroke to a session without attaching
+tmux send-keys -t term-1 "ls -la" Enter
+
+# Kill a session
+tmux kill-session -t term-1
+```
+
+> **Tip:** Sessions created manually with the `term-<id>` naming convention are automatically recovered by TmuxHub on server restart.
+
+---
+
 ## 🌟 Features
 
 - **Run Any Command** — Spawn isolated worker cards for any CLI tool (defaults to `claude`).
@@ -55,7 +115,7 @@ Open your browser at **`http://localhost:8081`** to log in!
 
 ## 📚 Detailed Documentation
 
-Detailed deployment guides and configurations have been moved to the [docs/](file:///home/san/workspace/TmuxHub/docs) directory:
+Detailed deployment guides and configurations have been moved to the [docs/](docs/) directory:
 
 * **[Installation & Deployment Guide](docs/installation.md)** — Step-by-step setup guides for macOS daemon (`launchd`), Ubuntu/Debian services, Docker Compose setups, and Cloudflare Secure Tunnels.
 * **[User Guide & Dashboard Usage](docs/usage.md)** — Learn how to log in, scan/attach existing sessions, leverage bidirectional mirroring, and interact with the virtual mechanical keyboard.
