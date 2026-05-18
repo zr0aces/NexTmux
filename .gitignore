@@ -50,3 +50,4 @@ coverage/
 
 # ── Dynamic Session State ──
 state/
+states/
