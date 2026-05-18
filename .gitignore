@@ -51,3 +51,5 @@ coverage/
 # ── Dynamic Session State ──
 state/
 states/
+session-state.json
+session.db
