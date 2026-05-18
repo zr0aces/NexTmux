@@ -258,19 +258,6 @@ All settings are optional. Defaults work out of the box.
 
 You can also override all of these via `config.json` → `aiMonitor` object (see `config.example.json`).
 
-## Docker Compose (optional)
-
-An optional `docker-compose.yml` is included for lightweight deployment:
-
-```bash
-docker compose up -d
-```
-
-Notes:
-- Compose mounts `./state` to persist monitoring metadata snapshots.
-- `tmux` must be available in the same runtime namespace where sessions are monitored.
-- TermHub must be able to see the tmux socket/session namespace it supervises.
-
 ## File Structure
 
 ```
