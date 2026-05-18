@@ -3,12 +3,13 @@
     "dotenv": "^17.4.2",
     "ws": "^8.20.1"
   },
-  "name": "termhub",
-  "version": "1.0.0",
+  "name": "tmuxhub",
+  "version": "2026.5.5",
   "main": "index.js",
   "scripts": {
     "start": "node server.js",
     "setup": "bash setup.sh",
+    "sync-version": "node scripts/sync-version.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],

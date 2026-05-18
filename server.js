@@ -1019,7 +1019,7 @@ function startTunnel() {
         fetch(DISCORD_WEBHOOK, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ content: `☁️ TermHub → ${tunnelUrl}` }),
+          body: JSON.stringify({ content: `☁️ TmuxHub → ${tunnelUrl}` }),
         }).catch(() => {});
       }
     }
@@ -1149,7 +1149,7 @@ function checkTunnel() {
 
 server.listen(PORT, () => {
   recoverSessions();
-  console.log(`✅ TermHub running → http://localhost:${PORT}`);
+  console.log(`✅ TmuxHub running → http://localhost:${PORT}`);
   console.log(`🔑 Password: ${PASSWORD}`);
   console.log(`📺 View tmux session: tmux attach -t term-1`);
   console.log(`👀 AI monitor: ${monitorConfig.enabled ? "enabled" : "disabled"} (poll=${monitorConfig.pollIntervalMs}ms, lines=${monitorConfig.linesToInspect})`);

@@ -1,5 +1,5 @@
 services:
-  termhub:
+  tmuxhub:
     image: node:20-bookworm
     working_dir: /app
     env_file:

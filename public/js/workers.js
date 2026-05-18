@@ -65,20 +65,27 @@ function ensureCard(id, cwd, status, logs, cmd, reason, monitorMeta) {
   card.id = 'card-' + id;
   card.innerHTML =
     '<div class="card-header">' +
-      '<span class="card-title" id="card-title-' + id + '">#' + id + ' ' + escapeHtml(cmdLabel) + ' · ' + escapeHtml(folderLabel) + '</span>' +
-      '<span class="badge' + (status === 'stopped' ? ' stopped' : '') + (status === 'completed' ? ' completed' : '') + '" id="badge-' + id + '">' + status + '</span>' +
-      '<button class="diff-btn" id="diff-' + id + '" title="Git Diff">Diff</button>' +
-      killBtnHtml(id, status) +
+      '<div class="card-title-wrap">' +
+        '<span class="card-title" id="card-title-' + id + '">#' + id + ' ' + escapeHtml(cmdLabel) + '</span>' +
+        '<span class="card-cwd" id="card-cwd-' + id + '" title="' + escapeHtml(cwd) + '">' + escapeHtml(displayPath(cwd)) + '</span>' +
+      '</div>' +
+      '<div class="card-actions">' +
+        '<span class="badge' + (status === 'stopped' ? ' stopped' : '') + (status === 'completed' ? ' completed' : '') + '" id="badge-' + id + '">' + status + '</span>' +
+        '<div class="ai-monitor-wrap">' +
+          '<button class="ai-monitor-toggle" id="ai-monitor-' + id + '" title="Toggle AI Monitor">👀 On</button>' +
+          '<div class="ai-telemetry-tooltip" id="tooltip-' + id + '">' +
+            '<div class="tooltip-title">🧠 AI Supervision</div>' +
+            '<div class="tooltip-line" id="meta-activity-' + id + '">Activity: -</div>' +
+            '<div class="tooltip-line" id="meta-pattern-' + id + '">Prompt: -</div>' +
+            '<div class="tooltip-line" id="meta-notify-' + id + '">Notify: -</div>' +
+            '<div class="tooltip-line" id="meta-reset-' + id + '" style="display:none">Reset: -</div>' +
+          '</div>' +
+        '</div>' +
+        '<button class="diff-btn" id="diff-' + id + '" title="Git Diff">Diff</button>' +
+        killBtnHtml(id, status) +
+      '</div>' +
     '</div>' +
-    '<div class="card-cwd">' + escapeHtml(displayPath(cwd)) + '</div>' +
     '<div class="exit-reason" id="exit-reason-' + id + '"></div>' +
-    '<div class="monitor-meta" id="meta-' + id + '">' +
-      '<span id="meta-activity-' + id + '">Activity: -</span>' +
-      '<span id="meta-pattern-' + id + '">Prompt: -</span>' +
-      '<span id="meta-notify-' + id + '">Notify: -</span>' +
-      '<span id="meta-reset-' + id + '" style="display:none">Reset: -</span>' +
-      '<button class="ai-monitor-toggle" id="ai-monitor-' + id + '" title="Toggle AI Monitor">👀 On</button>' +
-    '</div>' +
     '<div class="logs" id="logs-' + id + '"></div>' +
     '<div class="input-row" id="input-row-' + id + '"' + (status === 'stopped' || status === 'completed' ? ' style="display:none"' : '') + '>' +
       '<textarea id="inp-' + id + '" placeholder="Enter command..." rows="1"></textarea>' +

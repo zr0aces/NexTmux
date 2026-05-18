@@ -1,6 +1,6 @@
-# Contributing to TermHub
+# Contributing to TmuxHub
 
-Thanks for your interest in improving TermHub.
+Thanks for your interest in improving TmuxHub.
 
 ## Before you start
 

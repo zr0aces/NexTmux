@@ -1,4 +1,4 @@
-# TermHub
+# TmuxHub
 
 tmux를 활용한 멀티 터미널 세션 웹 대시보드. Claude, Gemini, GPT 등 어떤 CLI든 실행하고 한 곳에서 모니터링하세요.
 
@@ -6,7 +6,7 @@ tmux를 활용한 멀티 터미널 세션 웹 대시보드. Claude, Gemini, GPT 
 
 ## 프로젝트 상태
 
-TermHub는 현재 활발히 개발 중이며, 일부 버그나 미완성된 부분이 있을 수 있습니다.
+TmuxHub는 현재 활발히 개발 중이며, 일부 버그나 미완성된 부분이 있을 수 있습니다.
 문제를 발견하셨다면 재현 방법과 함께 이슈를 등록해 주세요.
 버그 제보와 기여는 언제나 환영합니다.
 
@@ -40,8 +40,8 @@ TermHub는 현재 활발히 개발 중이며, 일부 버그나 미완성된 부�
 셋업 스크립트를 실행하면 의존성 설치, 설정 파일 생성, 백그라운드 서비스 등록이 한 번에 완료됩니다:
 
 ```bash
-git clone https://github.com/sunmerrr/TermHub.git
-cd termhub
+git clone https://github.com/zr0aces/TmuxHub.git
+cd TmuxHub
 npm run setup
 ```
 
@@ -52,12 +52,12 @@ npm run setup
 4. `config.json` 생성 — 기본 경로와 기본 명령어 입력
 5. macOS launchd 서비스 등록 — 부팅 시 자동 시작, 크래시 시 자동 재시작
 
-설치 후 TermHub는 백그라운드에서 실행됩니다. 서비스 관리:
+설치 후 TmuxHub는 백그라운드에서 실행됩니다. 서비스 관리:
 
 ```bash
-launchctl unload ~/Library/LaunchAgents/com.termhub.server.plist   # 중지
-launchctl load ~/Library/LaunchAgents/com.termhub.server.plist     # 시작
-cat /tmp/termhub.log                                                # 로그 확인
+launchctl unload ~/Library/LaunchAgents/com.tmuxhub.server.plist   # 중지
+launchctl load ~/Library/LaunchAgents/com.tmuxhub.server.plist     # 시작
+cat /tmp/tmuxhub.log                                                # 로그 확인
 ```
 
 ## 수동 설치
@@ -80,7 +80,7 @@ cloudflared tunnel --url http://localhost:8081         # 터널 시작 (선택, 
 
 ## 외부 접근 (Cloudflare 터널)
 
-로컬 네트워크 외부(모바일, 다른 PC 등)에서 TermHub에 접근할 때는 Cloudflare Tunnel을 사용하세요.
+로컬 네트워크 외부(모바일, 다른 PC 등)에서 TmuxHub에 접근할 때는 Cloudflare Tunnel을 사용하세요.
 
 ### Cloudflare 설정
 
@@ -90,7 +90,7 @@ cloudflared tunnel --url http://localhost:8081         # 터널 시작 (선택, 
 brew install cloudflared
 ```
 
-2. 끝 — `cloudflared`가 PATH에 설치되어 있으면 TermHub가 서버 시작 시 자동으로 Cloudflare 터널을 실행합니다. 터널 URL은:
+2. 끝 — `cloudflared`가 PATH에 설치되어 있으면 TmuxHub가 서버 시작 시 자동으로 Cloudflare 터널을 실행합니다. 터널 URL은:
 
 - 서버 로그에 출력 (`☁️  Tunnel URL → https://...`)
 - API로 조회 가능: `GET /api/tunnel`
@@ -144,7 +144,7 @@ tmux attach -t term-2   # 워커 #2
 
 ## AI 대기 상태 모니터링
 
-TermHub는 tmux 세션을 감시하여 Claude Code, Codex CLI, Gemini CLI, aider 등의 AI CLI가 사용자 입력을 기다리는 상태를 설정 가능한 정규식 규칙으로 자동 감지합니다.
+TmuxHub는 tmux 세션을 감시하여 Claude Code, Codex CLI, Gemini CLI, aider 등의 AI CLI가 사용자 입력을 기다리는 상태를 설정 가능한 정규식 규칙으로 자동 감지합니다.
 
 - 폴링 간격 및 스캔 깊이 설정 가능
 - 정규식 패턴 설정 가능 (`config.json` → `aiMonitor.patterns`)
@@ -182,8 +182,8 @@ Telegram 변수를 설정하지 않으면 UI에서 대기 상태 감지는 계�
 ## 파일 구조
 
 ```
-termhub/
-├── server.js              # Node.js 서버 (tmux 관리, WebSocket)
+tmuxhub/
+├── server.js              # Node.js server (tmux management, WebSocket)
 ├── index.html             # 웹 UI 진입점
 ├── setup.sh               # 원스텝 셋업 스크립트
 ├── lib/
@@ -211,6 +211,10 @@ termhub/
 ├── README.md              # English
 └── README.ko.md           # 한국어
 ```
+
+## 감사 (Thanks)
+
+본 프로젝트는 오리지널 크리에이터 [sunmerrr/TermHub](https://github.com/sunmerrr/TermHub)의 영감과 기초 코드에 특별한 감사를 전합니다.
 
 ## 라이선스
 

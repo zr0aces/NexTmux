@@ -1,7 +1,7 @@
 // ── Init & Event Binding ──
 
-const REMEMBER_PW_KEY = 'termhub.rememberedPw.v1';
-const REMEMBER_PW_DB = 'termhub-secure-login';
+const REMEMBER_PW_KEY = 'tmuxhub.rememberedPw.v1';
+const REMEMBER_PW_DB = 'tmuxhub-secure-login';
 const REMEMBER_PW_STORE = 'keys';
 const REMEMBER_PW_KEY_ID = 'remember-password-key';
 
@@ -76,29 +76,58 @@ async function clearRememberedPassword(clearInput = false) {
 
 async function saveRememberedPassword(plainPassword) {
   if (!plainPassword) return clearRememberedPassword(false);
-  const key = await getRememberKey(true);
-  if (!key) return clearRememberedPassword(false);
-
-  const iv = crypto.getRandomValues(new Uint8Array(12));
-  const encoded = new TextEncoder().encode(plainPassword);
-  const cipher = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, encoded);
-  localStorage.setItem(REMEMBER_PW_KEY, JSON.stringify({
-    iv: toB64(iv),
-    data: toB64(new Uint8Array(cipher)),
-  }));
   const clearBtn = document.getElementById('clear-saved-pw-btn');
   if (clearBtn) clearBtn.style.display = '';
+
+  // Fallback if Web Crypto is unavailable (e.g. non-secure HTTP contexts)
+  if (!window.crypto || !window.crypto.subtle) {
+    localStorage.setItem(REMEMBER_PW_KEY, JSON.stringify({
+      fallback: true,
+      data: btoa(encodeURIComponent(plainPassword))
+    }));
+    return;
+  }
+
+  try {
+    const key = await getRememberKey(true);
+    if (!key) throw new Error('no_key');
+    const iv = crypto.getRandomValues(new Uint8Array(12));
+    const encoded = new TextEncoder().encode(plainPassword);
+    const cipher = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, encoded);
+    localStorage.setItem(REMEMBER_PW_KEY, JSON.stringify({
+      iv: toB64(iv),
+      data: toB64(new Uint8Array(cipher)),
+    }));
+  } catch {
+    // Graceful fallback to obfuscated storage if crypto errors out
+    localStorage.setItem(REMEMBER_PW_KEY, JSON.stringify({
+      fallback: true,
+      data: btoa(encodeURIComponent(plainPassword))
+    }));
+  }
 }
 
 async function loadRememberedPassword() {
   const payload = localStorage.getItem(REMEMBER_PW_KEY);
   if (!payload) return null;
-  const key = await getRememberKey(false);
-  if (!key) return null;
 
   try {
     const parsed = JSON.parse(payload);
-    if (!parsed || !parsed.iv || !parsed.data) return null;
+    if (!parsed) return null;
+    
+    // Decrypt fallback structure
+    if (parsed.fallback) {
+      return decodeURIComponent(atob(parsed.data));
+    }
+
+    if (!parsed.iv || !parsed.data) return null;
+    
+    // If browser environment doesn't support subtle crypto, can't decrypt original AES-GCM
+    if (!window.crypto || !window.crypto.subtle) return null;
+
+    const key = await getRememberKey(false);
+    if (!key) return null;
+
     const iv = fromB64(parsed.iv);
     const cipher = fromB64(parsed.data);
     const plain = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, cipher);
@@ -120,6 +149,9 @@ async function initRememberedPassword() {
     pwInput.value = saved;
     remember.checked = true;
     clearBtn.style.display = '';
+    
+    // Seamless auto-login on initial page load if saved password exists
+    doLogin();
   } else {
     remember.checked = false;
     clearBtn.style.display = 'none';
@@ -143,6 +175,7 @@ function doLogin() {
         setLayout(layout);
       } else {
         document.getElementById('login-err').style.display = 'block';
+        clearRememberedPassword(false); // Clear stale password if authentication fails
       }
     });
 }

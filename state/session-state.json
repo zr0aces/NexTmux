@@ -1,7 +1,7 @@
 {
   "hausecho": {
-    "lastActivityAt": "2026-05-18T14:59:18.668Z",
-    "waitingState": "idle",
+    "lastActivityAt": "2026-05-18T15:46:07.154Z",
+    "waitingState": "running",
     "lastMatchedPattern": null,
     "lastPromptExcerpt": null,
     "lastNotificationAt": null,

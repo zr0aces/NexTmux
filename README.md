@@ -1,4 +1,4 @@
-# TermHub
+# TmuxHub
 
 [한국어](README.ko.md)
 
@@ -8,7 +8,7 @@ If you find it useful, feel free to give it a star on GitHub.
 
 ## Project Status
 
-TermHub is actively developed and may contain bugs or rough edges.
+TmuxHub is actively developed and may contain bugs or rough edges.
 If you hit an issue, please open an issue with steps to reproduce.
 Contributions and bug reports are very welcome.
 
@@ -79,7 +79,7 @@ Recommended `config.json` starter:
 }
 ```
 
-### 3) Start TermHub
+### 3) Start TmuxHub
 
 ```bash
 npm start
@@ -111,14 +111,14 @@ npm start
 npm run setup
 ```
 
-The script checks dependencies, creates `.env` + `config.json`, and registers `com.termhub.server` in launchd.
+The script checks dependencies, creates `.env` + `config.json`, and registers `com.tmuxhub.server` in launchd.
 
 Service management:
 
 ```bash
-launchctl unload ~/Library/LaunchAgents/com.termhub.server.plist   # Stop
-launchctl load ~/Library/LaunchAgents/com.termhub.server.plist     # Start
-cat /tmp/termhub.log                                                # Logs
+launchctl unload ~/Library/LaunchAgents/com.tmuxhub.server.plist   # Stop
+launchctl load ~/Library/LaunchAgents/com.tmuxhub.server.plist     # Start
+cat /tmp/tmuxhub.log                                                # Logs
 ```
 
 ### Ubuntu / Debian
@@ -155,7 +155,7 @@ brew install cloudflared
 # or see official install docs for Linux packages
 ```
 
-If `cloudflared` is available in `PATH`, TermHub auto-starts a tunnel unless disabled.
+If `cloudflared` is available in `PATH`, TmuxHub auto-starts a tunnel unless disabled.
 
 - Disable with `.env`: `ENABLE_TUNNEL=0`
 - Or with `config.json`: `"tunnel": { "enabled": false }`
@@ -213,7 +213,7 @@ tmux detach-client
 
 ## AI wait-state monitoring
 
-TermHub supervises tmux sessions and detects wait prompts from Claude Code, Codex CLI, Gemini CLI, aider, and similar workflows using configurable regex rules.
+TmuxHub supervises tmux sessions and detects wait prompts from Claude Code, Codex CLI, Gemini CLI, aider, and similar workflows using configurable regex rules.
 
 - Configurable polling interval and scan depth
 - Configurable regex patterns (`config.json` → `aiMonitor.patterns`)
@@ -251,7 +251,7 @@ You can also override all of these via `config.json` → `aiMonitor` object (see
 ## File Structure
 
 ```
-termhub/
+tmuxhub/
 ├── server.js              # Node.js server (tmux management, WebSocket)
 ├── index.html             # Web UI entry point
 ├── setup.sh               # One-step setup script
@@ -279,6 +279,10 @@ termhub/
 ├── package.json
 └── README.md
 ```
+
+## Thanks
+
+Special thanks to the original creator [sunmerrr/TermHub](https://github.com/sunmerrr/TermHub) for the inspiration and foundation of this project.
 
 ## License
 

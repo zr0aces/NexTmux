@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-echo "🚀 TermHub Setup"
+echo "🚀 TmuxHub Setup"
 echo "================"
 echo
 
@@ -83,9 +83,9 @@ fi
 
 # 6. Setup launchd (background service)
 echo
-PLIST_NAME="com.termhub.server"
+PLIST_NAME="com.tmuxhub.server"
 PLIST_PATH="$HOME/Library/LaunchAgents/${PLIST_NAME}.plist"
-TERMHUB_DIR="$(cd "$(dirname "$0")" && pwd)"
+TMUXHUB_DIR="$(cd "$(dirname "$0")" && pwd)"
 NODE_PATH="$(which node)"
 
 # Unload if already loaded
@@ -101,30 +101,30 @@ cat > "$PLIST_PATH" << EOF
     <key>ProgramArguments</key>
     <array>
         <string>${NODE_PATH}</string>
-        <string>${TERMHUB_DIR}/server.js</string>
+        <string>${TMUXHUB_DIR}/server.js</string>
     </array>
     <key>WorkingDirectory</key>
-    <string>${TERMHUB_DIR}</string>
+    <string>${TMUXHUB_DIR}</string>
     <key>RunAtLoad</key>
     <true/>
     <key>KeepAlive</key>
     <true/>
     <key>StandardOutPath</key>
-    <string>/tmp/termhub.log</string>
+    <string>/tmp/tmuxhub.log</string>
     <key>StandardErrorPath</key>
-    <string>/tmp/termhub.err</string>
+    <string>/tmp/tmuxhub.err</string>
 </dict>
 </plist>
 EOF
 
 launchctl load "$PLIST_PATH"
-echo "✅ TermHub service registered & started"
+echo "✅ TmuxHub service registered & started"
 
 echo
-echo "🎉 Setup complete! TermHub is running in the background."
+echo "🎉 Setup complete! TmuxHub is running in the background."
 echo
 echo "   Management commands:"
 echo "   launchctl unload $PLIST_PATH   # Stop"
 echo "   launchctl load $PLIST_PATH     # Start"
-echo "   cat /tmp/termhub.log           # Logs"
+echo "   cat /tmp/tmuxhub.log           # Logs"
 echo

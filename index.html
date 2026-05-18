@@ -3,28 +3,58 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>TermHub</title>
-<link rel="stylesheet" href="/style.css?v=4">
+<title>TmuxHub — Premium Tmux Workspace Manager</title>
+<meta name="description" content="A lightweight, real-time developer terminal dashboard and workspace manager powered by Tmux and active monitoring.">
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%230f172a'/%3E%3Cline x1='16' y1='4' x2='16' y2='28' stroke='%23334155' stroke-width='2'/%3E%3Cpath d='M6 10 L10 13 L6 16' fill='none' stroke='%23ea580c' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3Crect x='20' y='19' width='6' height='2' fill='%2338bdf8'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/style.css?v=2026.5.3">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/diff2html/bundles/css/diff2html.min.css" />
 </head>
 <body>
 
 <div id="login">
-  <h2 style="font-size:20px">TermHub</h2>
-  <input id="pw" type="password" placeholder="Password" />
-  <label class="login-remember">
-    <input id="remember-pw" type="checkbox" />
-    Remember Password
-  </label>
-  <button id="clear-saved-pw-btn" class="login-secondary-btn" type="button" style="display:none">Clear Saved Password</button>
-  <button id="login-btn">Login</button>
-  <span id="login-err">Incorrect password</span>
+  <div class="login-card">
+    <div class="login-logo-wrap">
+      <svg class="login-logo-svg" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">
+        <rect width="32" height="32" rx="8" fill="#0d111c"/>
+        <line x1="16" y1="4" x2="16" y2="28" stroke="#1e293b" stroke-width="2"/>
+        <path d="M6 10 L10 13 L6 16" fill="none" stroke="#ea580c" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+        <rect x="20" y="19" width="6" height="2" fill="#38bdf8"/>
+      </svg>
+      <h2>TmuxHub</h2>
+    </div>
+    <p class="login-subtitle">Tmux Workspace Manager <span class="login-version">v2026.5.3</span></p>
+    
+    <div class="login-input-group">
+      <input id="pw" type="password" placeholder="Enter Access Password..." />
+    </div>
+    
+    <label class="login-remember">
+      <input id="remember-pw" type="checkbox" />
+      Remember Password
+    </label>
+    
+    <button id="login-btn">Unlock Dashboard</button>
+    <button id="clear-saved-pw-btn" class="login-secondary-btn" type="button" style="display:none">Clear Saved Key</button>
+    
+    <span id="login-err">Incorrect password</span>
+  </div>
 </div>
 
 <div id="app" style="display:none;flex-direction:column;height:100dvh;overflow:hidden">
   <header>
-    <div id="status-dot" class="off"></div>
-    <h1>TermHub</h1>
+    <div class="brand-wrap">
+      <div id="status-dot" class="off"></div>
+      <svg class="brand-logo-svg" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">
+        <rect width="32" height="32" rx="8" fill="#0d111c"/>
+        <line x1="16" y1="4" x2="16" y2="28" stroke="#1e293b" stroke-width="2"/>
+        <path d="M6 10 L10 13 L6 16" fill="none" stroke="#ea580c" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+        <rect x="20" y="19" width="6" height="2" fill="#38bdf8"/>
+      </svg>
+      <h1>TmuxHub</h1>
+    </div>
     <div class="layout-group">
       <button id="layout-tab-btn" class="header-btn layout-active">Tab</button>
       <button id="layout-split-btn" class="header-btn">Split</button>
@@ -62,14 +92,14 @@
   </div>
 </div>
 
-<script src="/js/ansi.js?v=4"></script>
-<script src="/js/layout.js?v=4"></script>
-<script src="/js/favorites.js?v=4"></script>
-<script src="/js/ws.js?v=4"></script>
-<script src="/js/preview.js?v=4"></script>
+<script src="/js/ansi.js?v=2026.5.3"></script>
+<script src="/js/layout.js?v=2026.5.3"></script>
+<script src="/js/favorites.js?v=2026.5.3"></script>
+<script src="/js/ws.js?v=2026.5.3"></script>
+<script src="/js/preview.js?v=2026.5.3"></script>
 <script src="https://cdn.jsdelivr.net/npm/diff2html/bundles/js/diff2html-ui-slim.min.js"></script>
-<script src="/js/git-diff.js?v=4"></script>
-<script src="/js/workers.js?v=4"></script>
-<script src="/js/app.js?v=4"></script>
+<script src="/js/git-diff.js?v=2026.5.3"></script>
+<script src="/js/workers.js?v=2026.5.3"></script>
+<script src="/js/app.js?v=2026.5.3"></script>
 </body>
 </html>
