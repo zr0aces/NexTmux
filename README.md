@@ -4,286 +4,103 @@
 
 A web dashboard for managing multiple terminal sessions via tmux. Run any command — Claude CLI, bash, python, or anything else — and monitor them all from one place.
 
-If you find it useful, feel free to give it a star on GitHub.
+If you find it useful, feel free to give it a star on GitHub!
 
-## Project Status
+---
 
-TmuxHub is actively developed and may contain bugs or rough edges.
-If you hit an issue, please open an issue with steps to reproduce.
-Contributions and bug reports are very welcome.
+## 🌟 Features
 
-## Features
+- **Run Any Command** — Spawn isolated worker cards for any CLI tool (defaults to `claude`).
+- **Interactive Multi-Pane Dashboard** — View and manage multiple sessions concurrently.
+- **Two-Way Terminal Mirroring** — Real-time bidirectional session attachments between the Web UI and local terminals.
+- **Automated AI State Detection** — Watches shell output to detect AI CLI status:
+  - 🔵 Working → 🟢 Idle → 🟡 Waiting (Action Needed)
+- **Telegram & Discord Alerts** — Outbound webhook alerts when an AI CLI halts and requires human permission.
+- **Quick Controls** — Split/Tab layout toggles, favorites directory access, and an integrated virtual developer keyboard.
 
-- **Run any command** — spawn sessions with any CLI tool (default: `claude`)
-- **Multiple terminal sessions** — each runs as an independent worker in a tmux session
-- **Real-time logs** — captures and displays tmux output in real time
-- **AI state detection** — automatically detects AI CLI state from terminal output:
-  - 🔵 Working → 🟢 Idle → 🟡 Waiting (permission needed)
-- **Telegram wait alerts** — sends outbound notifications when an AI CLI is waiting for human input
-- **Two-way mirroring** — view the same session from both the dashboard and your local terminal
+---
 
-### More
+## 📋 Prerequisites
 
-- **tmux session scanning** — auto-detect and attach to existing sessions
-- **Tab / Split layout** — Tab mode for focus, Split mode for side-by-side
-- **Favorites & recent paths** — quick access to frequently used directories
-- **Password auth + external tunnels** — Cloudflare tunnel for remote access
-- **Adaptive terminal size** — tmux resizes to match your screen
-- **Keyboard shortcuts** — Esc, Shift+Tab, Ctrl+C, arrow keys forwarded to active worker
+- **[Node.js](https://nodejs.org) 22+**
+- **[tmux](https://github.com/tmux/tmux)**
 
-## Prerequisites
+---
 
-- [Node.js](https://nodejs.org) 22+
-- [tmux](https://github.com/tmux/tmux)
-- Optional for remote access:
-  - [cloudflared](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/)
+## 🚀 Quick Start (Minimal Setup)
 
-## Deployment & Setup
-
-### 1) Clone and install
-
+### 1. Clone & Install
 ```bash
 git clone https://github.com/zr0aces/TmuxHub.git
 cd TmuxHub
 npm install
 ```
 
-### 2) Create runtime config files
-
+### 2. Configure Environment
 ```bash
 cp .env.example .env
 cp config.example.json config.json
 ```
-
-Minimum required `.env` values:
-
+Ensure your `.env` contains a secure entry password:
 ```env
 PORT=8081
-DASHBOARD_PASSWORD=replace-with-a-strong-password
+DASHBOARD_PASSWORD=your-secret-password-here
 ```
 
-> Notes:
-> - If `PORT` is not set, the server default is `8081`.
-> - The helper setup script currently prompts with `8080`; update `.env` afterward if you want `8081`.
-
-Recommended `config.json` starter:
-
-```json
-{
-  "basePath": "/absolute/path/for/projects",
-  "favorites": [
-    "/absolute/path/for/projects/project-a"
-  ],
-  "defaultCommand": "claude",
-  "tunnel": { "enabled": true }
-}
-```
-
-### 3) Start TmuxHub
-
+### 3. Launch Server
 ```bash
 npm start
 ```
+Open your browser at **`http://localhost:8081`** to log in!
 
-Open the Web UI at:
+---
+
+## 📚 Detailed Documentation
+
+Detailed deployment guides and configurations have been moved to the [docs/](file:///home/san/workspace/TmuxHub/docs) directory:
+
+* **[Installation & Deployment Guide](docs/installation.md)** — Step-by-step setup guides for macOS daemon (`launchd`), Ubuntu/Debian services, Docker Compose setups, and Cloudflare Secure Tunnels.
+* **[User Guide & Dashboard Usage](docs/usage.md)** — Learn how to log in, scan/attach existing sessions, leverage bidirectional mirroring, and interact with the virtual mechanical keyboard.
+* **[AI State Monitoring & Alerts Setup](docs/ai_monitoring.md)** — Setup guide for configuring Telegram outbound alerts, tuning idle thresholds, and modifying regex patterns.
+
+---
+
+## 📂 File Structure
 
 ```text
-http://localhost:8081
-```
-
----
-
-## Environment-specific installation
-
-### macOS (manual)
-
-```bash
-brew install node tmux
-npm install
-cp .env.example .env
-cp config.example.json config.json
-npm start
-```
-
-### macOS (guided setup + launchd service)
-
-```bash
-npm run setup
-```
-
-The script checks dependencies, creates `.env` + `config.json`, and registers `com.tmuxhub.server` in launchd.
-
-Service management:
-
-```bash
-launchctl unload ~/Library/LaunchAgents/com.tmuxhub.server.plist   # Stop
-launchctl load ~/Library/LaunchAgents/com.tmuxhub.server.plist     # Start
-cat /tmp/tmuxhub.log                                                # Logs
-```
-
-### Ubuntu / Debian
-
-```bash
-sudo apt-get update
-sudo apt-get install -y nodejs npm tmux
-npm install
-cp .env.example .env
-cp config.example.json config.json
-npm start
-```
-
-### Docker Compose (optional)
-
-```bash
-cp .env.example .env
-cp config.example.json config.json
-docker compose up -d
-```
-
-By default, Compose publishes `8081:8081` (see `docker-compose.yml`).
-
----
-
-## Remote access (optional)
-
-### Cloudflare Tunnel (recommended)
-
-Install cloudflared:
-
-```bash
-brew install cloudflared
-# or see official install docs for Linux packages
-```
-
-If `cloudflared` is available in `PATH`, TmuxHub auto-starts a tunnel unless disabled.
-
-- Disable with `.env`: `ENABLE_TUNNEL=0`
-- Or with `config.json`: `"tunnel": { "enabled": false }`
-
-Tunnel URL visibility:
-- server log (`☁️ Tunnel URL → https://...`)
-- `GET /api/tunnel`
-- WebSocket broadcast to connected clients
-
-Optional Discord notification:
-
-```env
-DISCORD_WEBHOOK=https://discord.com/api/webhooks/your/webhook-url
-```
-
-## Usage (new user quick guide)
-
-### Step 1: Log in to the Web UI
-1. Start the server (`npm start`)
-2. Open `http://localhost:8081`
-3. Enter `DASHBOARD_PASSWORD`
-4. (Optional) enable **Remember Password**
-
-### Step 2: Start your first tmux-backed session
-1. Click **+** in the header
-2. Set **Working directory** (type path or choose from favorites/recent)
-3. Set **Command** (for example: `claude`, `bash`, `python`)
-4. Click **+ New**
-
-This creates a tmux session named `term-{id}` (for example, `term-1`).
-
-### Step 3: Manage active workflows
-- Send commands in the input box or keyboard toolkit
-- Watch live output in the log pane
-- Use **Tab / Split** mode depending on focus vs multi-session monitoring
-- Click **Diff** to inspect git changes in the worker directory
-
-### Step 4: Attach already-running tmux sessions
-1. Click **🔍 Scan**
-2. Confirm discovered sessions
-3. Continue managing them from the dashboard
-
-### Step 5: Use tmux directly from terminal when needed
-
-```bash
-tmux ls
-tmux attach -t term-1
-tmux detach-client
-```
-
-### Step 6: Stop or clean up sessions
-- **Stop**: terminate a running worker session
-- **Reconnect**: reattach if the session is still alive
-- **Remove**: remove a stopped/completed worker card from UI
-
-## AI wait-state monitoring
-
-TmuxHub supervises tmux sessions and detects wait prompts from Claude Code, Codex CLI, Gemini CLI, aider, and similar workflows using configurable regex rules.
-
-- Configurable polling interval and scan depth
-- Configurable regex patterns (`config.json` → `aiMonitor.patterns`)
-- Debounced outbound Telegram notifications (outbound only — no callback buttons)
-- Per-worker metadata row in each card:
-  - last activity timestamp
-  - last matched prompt/pattern
-  - last notification status and time
-
-### Telegram notifications
-
-Set these two variables in `.env` to enable outbound alerts:
-
-```env
-TELEGRAM_BOT_TOKEN=<bot-token>
-TELEGRAM_CHAT_ID=<chat-id>
-```
-
-If Telegram variables are not set, wait detection still works in the UI — only the notification step is skipped safely.
-
-### Tuning the monitor
-
-All settings are optional. Defaults work out of the box.
-
-| Variable | Default | Description |
-|---|---|---|
-| `AI_MONITOR_ENABLED` | `1` | Set `0` to disable monitoring entirely |
-| `AI_MONITOR_POLL_INTERVAL_MS` | `1000` | tmux pane capture interval (ms) |
-| `AI_MONITOR_IDLE_THRESHOLD_MS` | `5000` | No-output duration before marking idle (ms) |
-| `AI_MONITOR_LINES_TO_SCAN` | `120` | Recent lines inspected for patterns |
-| `AI_MONITOR_NOTIFY_COOLDOWN_MS` | `120000` | Debounce window between repeat alerts (ms) |
-
-You can also override all of these via `config.json` → `aiMonitor` object (see `config.example.json`).
-
-## File Structure
-
-```
 tmuxhub/
+├── docs/                  # Detailed documentation guides
+│   ├── installation.md    # Environments, systemd/launchd, tunnels
+│   ├── usage.md           # Dashboard user guide & tmux commands
+│   └── ai_monitoring.md   # Supervision engine & Telegram setup
 ├── server.js              # Node.js server (tmux management, WebSocket)
 ├── index.html             # Web UI entry point
-├── setup.sh               # One-step setup script
+├── setup.sh               # One-step macOS setup script
 ├── lib/
 │   ├── patternEngine.js   # Regex wait-state detection
 │   ├── watcherEngine.js   # Poll loop + state transitions
 │   ├── telegramService.js # Outbound Telegram notifications
-│   └── sessionStateManager.js  # Metadata + debounce + persistence
+│   └── sessionStateManager.js # Metadata persistence & debouncing
 ├── public/
 │   ├── style.css          # Styles
 │   └── js/
 │       ├── layout.js      # Layout & tab management
 │       ├── favorites.js   # Favorites & path management
-│       ├── ws.js          # WebSocket & API communication
-│       ├── workers.js     # Worker card UI & actions
+│       ├── ws.js          # WebSocket communication
+│       ├── workers.js     # Worker card UI rendering
 │       └── app.js         # Init & event binding
-├── state/
-│   └── session-state.json # Runtime monitoring metadata snapshot (auto-created)
-├── config.json            # User config (gitignored)
-├── config.example.json    # Config template
-├── .env                   # Environment variables (gitignored)
-├── .env.example           # Environment variable template
-├── docker-compose.yml     # Optional Docker deployment
-├── .gitignore
-├── package.json
-└── README.md
+├── config.example.json    # User config template
+└── .env.example           # Environment variables template
 ```
 
-## Thanks
+---
+
+## 🤝 Thanks
 
 Special thanks to the original creator [sunmerrr/TermHub](https://github.com/sunmerrr/TermHub) for the inspiration and foundation of this project.
 
-## License
+---
+
+## 📄 License
 
 MIT
