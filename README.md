@@ -73,6 +73,7 @@ tmux kill-session -t term-1
 - **Two-Way Terminal Mirroring** — Real-time bidirectional session attachments between the Web UI and local terminals.
 - **Automated AI State Detection** — Watches shell output to detect AI CLI status:
   - 🔵 Working → 🟢 Idle → 🟡 Waiting (Action Needed)
+  - ⚡ **Auto Mode** — Automatically responds "yes" to prompts when enabled per worker.
 - **Telegram & Discord Alerts** — Outbound webhook alerts when an AI CLI halts and requires human permission.
 - **Quick Controls** — Split/Tab layout toggles, favorites directory access, and an integrated virtual developer keyboard.
 

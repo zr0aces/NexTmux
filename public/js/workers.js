@@ -73,11 +73,13 @@ function ensureCard(id, cwd, status, logs, cmd, reason, monitorMeta) {
         '<span class="badge' + (status === 'stopped' ? ' stopped' : '') + (status === 'completed' ? ' completed' : '') + '" id="badge-' + id + '">' + status + '</span>' +
         '<div class="ai-monitor-wrap">' +
           '<button class="ai-monitor-toggle" id="ai-monitor-' + id + '" title="Toggle AI Monitor">👀 On</button>' +
+          '<button class="auto-mode-toggle" id="auto-mode-' + id + '" title="Toggle Auto Mode (auto-respond yes to prompts)">⚡ Auto</button>' +
           '<div class="ai-telemetry-tooltip" id="tooltip-' + id + '">' +
             '<div class="tooltip-title">🧠 AI Supervision</div>' +
             '<div class="tooltip-line" id="meta-activity-' + id + '">Activity: -</div>' +
             '<div class="tooltip-line" id="meta-pattern-' + id + '">Prompt: -</div>' +
             '<div class="tooltip-line" id="meta-notify-' + id + '">Notify: -</div>' +
+            '<div class="tooltip-line" id="meta-automode-' + id + '">Auto Mode: Off</div>' +
             '<div class="tooltip-line" id="meta-reset-' + id + '" style="display:none">Reset: -</div>' +
           '</div>' +
         '</div>' +
@@ -169,6 +171,7 @@ function bindCard(id, root) {
   const sendBtn = q('#send-' + id);
   const inp = q('#inp-' + id);
   const aiMonitorBtn = q('#ai-monitor-' + id);
+  const autoModeBtn = q('#auto-mode-' + id);
 
   const diffBtn = q('#diff-' + id);
   if (diffBtn) diffBtn.addEventListener('click', () => openGitDiff(id));
@@ -176,6 +179,7 @@ function bindCard(id, root) {
   if (killBtn) killBtn.addEventListener('click', () => killWorker(id));
   if (sendBtn) sendBtn.addEventListener('click', () => sendInput(id));
   if (aiMonitorBtn) aiMonitorBtn.addEventListener('click', () => toggleAiMonitor(id));
+  if (autoModeBtn) autoModeBtn.addEventListener('click', () => toggleAutoMode(id));
   if (inp) {
     // Workaround for Chrome IME bug: pressing Enter during CJK composition duplicates the last character.
     // While composing, pass Enter through to the IME; send the input only on compositionend.
@@ -373,6 +377,14 @@ function updateMonitorMeta(id, meta) {
     el.textContent = (isEnabled ? '👀 On' : '👁 Off');
     el.className = 'ai-monitor-toggle' + (isEnabled ? ' enabled' : ' disabled');
   });
+  document.querySelectorAll('#auto-mode-' + id).forEach(el => {
+    const isAuto = meta.autoMode === true;
+    el.textContent = (isAuto ? '⚡ Auto' : '⚡ Manual');
+    el.className = 'auto-mode-toggle' + (isAuto ? ' enabled' : ' disabled');
+  });
+  document.querySelectorAll('#meta-automode-' + id).forEach(el => {
+    el.textContent = 'Auto Mode: ' + (meta.autoMode === true ? 'On (auto-respond yes)' : 'Off');
+  });
 }
 
 function removeWorker(id) {
@@ -449,6 +461,15 @@ function toggleAiMonitor(id) {
       if (!ok) console.error('Failed to toggle AI monitor');
     })
     .catch(e => console.error('Error toggling AI monitor:', e));
+}
+
+function toggleAutoMode(id) {
+  apiPost('/api/toggle-auto-mode', { id })
+    .then(r => r.json().catch(() => ({})).then(d => ({ ok: r.ok, d })))
+    .then(({ ok }) => {
+      if (!ok) console.error('Failed to toggle Auto Mode');
+    })
+    .catch(e => console.error('Error toggling Auto Mode:', e));
 }
 
 function spawnSession() {

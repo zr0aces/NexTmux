@@ -329,6 +329,7 @@ function initializeWorkerMonitorState(worker) {
   worker.lastNotificationAt = worker.lastNotificationAt || null;
   worker.notificationStatus = worker.notificationStatus || null;
   worker.aiMonitorEnabled = worker.aiMonitorEnabled !== undefined ? worker.aiMonitorEnabled : monitorConfig.enabled;
+  worker.autoMode = worker.autoMode !== undefined ? worker.autoMode : false;
   sessionStateManager.hydrateWorker(worker);
 }
 
@@ -535,6 +536,10 @@ function pollOutput(id) {
 
   if (inspect.detection?.matched && nextState === "waiting" && (stateChanged || inspect.changed)) {
     sendWaitingAlert(id, inspect.detection, now);
+  }
+
+  if (nextState === "waiting" && stateChanged && w.autoMode) {
+    sendInput(id, "y");
   }
 
   broadcastMonitorMeta(id);
@@ -817,6 +822,17 @@ const server = http.createServer(async (req, res) => {
     const w = workers.get(id);
     if (!w) return json(res, 404, { ok: false });
     const enabled = sessionStateManager.toggleAiMonitor(w);
+    broadcast({ type: "monitorMeta", id, ...getMonitorMeta(w) });
+    return json(res, 200, { ok: true, enabled });
+  }
+
+  if (method === "POST" && url === "/api/toggle-auto-mode") {
+    const { ok, body } = await parseBody(req);
+    if (!ok || !body) return json(res, 400, { error: "invalid request body" });
+    const { id } = body;
+    const w = workers.get(id);
+    if (!w) return json(res, 404, { ok: false });
+    const enabled = sessionStateManager.toggleAutoMode(w);
     broadcast({ type: "monitorMeta", id, ...getMonitorMeta(w) });
     return json(res, 200, { ok: true, enabled });
   }

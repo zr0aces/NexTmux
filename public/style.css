@@ -666,7 +666,8 @@ header h1 {
 
 .diff-btn,
 .kill-btn,
-.ai-monitor-toggle {
+.ai-monitor-toggle,
+.auto-mode-toggle {
   height: 24px;
   font-family: var(--font-ui);
   font-size: 11px;
@@ -730,6 +731,30 @@ header h1 {
 }
 
 .ai-monitor-toggle.disabled:hover {
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text-secondary);
+}
+
+.auto-mode-toggle.enabled {
+  color: var(--accent-warning);
+  border-color: rgba(245, 158, 11, 0.2);
+  background: rgba(245, 158, 11, 0.06);
+}
+
+.auto-mode-toggle.enabled:hover {
+  background: var(--accent-warning);
+  border-color: var(--accent-warning);
+  color: #fff;
+  box-shadow: 0 0 8px rgba(245, 158, 11, 0.3);
+}
+
+.auto-mode-toggle.disabled {
+  color: var(--text-muted);
+  border-color: var(--border-color);
+  background: transparent;
+}
+
+.auto-mode-toggle.disabled:hover {
   background: rgba(255, 255, 255, 0.05);
   color: var(--text-secondary);
 }
@@ -1763,7 +1788,8 @@ header h1 {
 
   .diff-btn,
   .kill-btn,
-  .ai-monitor-toggle {
+  .ai-monitor-toggle,
+  .auto-mode-toggle {
     height: 20px;
     font-size: 10px;
     padding: 0 6px;
