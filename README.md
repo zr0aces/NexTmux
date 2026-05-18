@@ -19,7 +19,7 @@ Contributions and bug reports are very welcome.
 - **Real-time logs** — captures and displays tmux output in real time
 - **AI state detection** — automatically detects AI CLI state from terminal output:
   - 🔵 Working → 🟢 Idle → 🟡 Waiting (permission needed)
-- **Telegram wait alerts (MVP)** — sends outbound notifications when an AI CLI is waiting for human input
+- **Telegram wait alerts** — sends outbound notifications when an AI CLI is waiting for human input
 - **Two-way mirroring** — view the same session from both the dashboard and your local terminal
 
 ### More
@@ -96,11 +96,24 @@ To access TermHub from outside your local network (mobile, another PC, etc.), us
 brew install cloudflared
 ```
 
-2. That's it — TermHub automatically starts a Cloudflare tunnel on launch. The tunnel URL is:
+2. That's it — if `cloudflared` is found in your PATH, TermHub automatically starts a Cloudflare tunnel on launch. The tunnel URL is:
 
 - Printed in the server log (`☁️  Tunnel URL → https://...`)
 - Available via API: `GET /api/tunnel`
 - Broadcast to connected clients via WebSocket
+
+**To disable the auto-tunnel** (if you don't need remote access or prefer to start it manually):
+
+```env
+# .env
+ENABLE_TUNNEL=0
+```
+
+Or in `config.json`:
+
+```json
+{ "tunnel": { "enabled": false } }
+```
 
 3. (Optional) **Discord notification** — add a webhook URL to `.env` to receive the tunnel URL on Discord whenever the server starts:
 
@@ -163,26 +176,42 @@ Use the **Tab / Split** buttons in the header. Your choice is saved in the brows
 - Running: **Stop** button — terminates the tmux session
 - Stopped: **Remove** button — removes from the dashboard
 
-## AI wait-state monitoring (MVP)
+## AI wait-state monitoring
 
-TermHub can supervise tmux sessions and detect wait prompts from Claude Code, Codex CLI, Gemini CLI, aider, and OpenHands-style workflows using regex rules.
+TermHub supervises tmux sessions and detects wait prompts from Claude Code, Codex CLI, Gemini CLI, aider, and similar workflows using configurable regex rules.
 
 - Configurable polling interval and scan depth
 - Configurable regex patterns (`config.json` → `aiMonitor.patterns`)
-- Debounced notifications to Telegram (outbound only)
-- Worker card metadata:
+- Debounced outbound Telegram notifications (outbound only — no callback buttons)
+- Per-worker metadata row in each card:
   - last activity timestamp
   - last matched prompt/pattern
-  - last notification status/time
+  - last notification status and time
 
-### Required environment variables for Telegram notifications
+### Telegram notifications
+
+Set these two variables in `.env` to enable outbound alerts:
 
 ```env
 TELEGRAM_BOT_TOKEN=<bot-token>
 TELEGRAM_CHAT_ID=<chat-id>
 ```
 
-If Telegram variables are not set, wait detection still works in UI but notification sending is skipped safely.
+If Telegram variables are not set, wait detection still works in the UI — only the notification step is skipped safely.
+
+### Tuning the monitor
+
+All settings are optional. Defaults work out of the box.
+
+| Variable | Default | Description |
+|---|---|---|
+| `AI_MONITOR_ENABLED` | `1` | Set `0` to disable monitoring entirely |
+| `AI_MONITOR_POLL_INTERVAL_MS` | `1000` | tmux pane capture interval (ms) |
+| `AI_MONITOR_IDLE_THRESHOLD_MS` | `5000` | No-output duration before marking idle (ms) |
+| `AI_MONITOR_LINES_TO_SCAN` | `120` | Recent lines inspected for patterns |
+| `AI_MONITOR_NOTIFY_COOLDOWN_MS` | `120000` | Debounce window between repeat alerts (ms) |
+
+You can also override all of these via `config.json` → `aiMonitor` object (see `config.example.json`).
 
 ## Docker Compose (optional)
 
@@ -204,6 +233,11 @@ termhub/
 ├── server.js              # Node.js server (tmux management, WebSocket)
 ├── index.html             # Web UI entry point
 ├── setup.sh               # One-step setup script
+├── lib/
+│   ├── patternEngine.js   # Regex wait-state detection
+│   ├── watcherEngine.js   # Poll loop + state transitions
+│   ├── telegramService.js # Outbound Telegram notifications
+│   └── sessionStateManager.js  # Metadata + debounce + persistence
 ├── public/
 │   ├── style.css          # Styles
 │   └── js/
@@ -212,9 +246,13 @@ termhub/
 │       ├── ws.js          # WebSocket & API communication
 │       ├── workers.js     # Worker card UI & actions
 │       └── app.js         # Init & event binding
+├── state/
+│   └── session-state.json # Runtime monitoring metadata snapshot (auto-created)
 ├── config.json            # User config (gitignored)
 ├── config.example.json    # Config template
 ├── .env                   # Environment variables (gitignored)
+├── .env.example           # Environment variable template
+├── docker-compose.yml     # Optional Docker deployment
 ├── .gitignore
 ├── package.json
 └── README.md

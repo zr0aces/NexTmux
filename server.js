@@ -384,17 +384,23 @@ function pollOutput(id) {
   }
   const cols = w.cols || 80;
   const rows = w.rows || 50;
-  tmux(`resize-pane -t ${w.sessionName} -x ${cols} -y ${rows}`);
-  tmux(`resize-window -t ${w.sessionName} -x ${cols} -y ${rows}`);
+  // Only resize when dimensions actually changed to avoid unnecessary tmux calls
+  if (cols !== w._lastCols || rows !== w._lastRows) {
+    tmux(`resize-pane -t ${w.sessionName} -x ${cols} -y ${rows}`);
+    tmux(`resize-window -t ${w.sessionName} -x ${cols} -y ${rows}`);
+    w._lastCols = cols;
+    w._lastRows = rows;
+  }
   const output = tmux(`capture-pane -t ${w.sessionName} -p -S -500 -J`);
 
-  // Track actual working directory
-  const currentCwd = tmux(`display-message -t ${w.sessionName} -p "#{pane_current_path}"`).trim();
+  // Fetch cwd and pane command in a single tmux call (saves one sub-process per poll)
+  const _info = tmux(`display-message -t ${w.sessionName} -p "#{pane_current_path}|||#{pane_current_command}"`).trim().split("|||");
+  const currentCwd = _info[0] || "";
+  const currentPaneCmd = _info[1] || "";
   if (currentCwd && currentCwd !== w.cwd) {
     w.cwd = currentCwd;
     broadcast({ type: "cwd", id, cwd: currentCwd });
   }
-  const currentPaneCmd = tmux(`display-message -t ${w.sessionName} -p "#{pane_current_command}"`).trim();
   if (currentPaneCmd) {
     w.lastPaneCommand = currentPaneCmd;
     if (w.expectedCmd && currentPaneCmd === w.expectedCmd) w.seenExpectedCmd = true;
@@ -501,10 +507,19 @@ function broadcast(obj) {
   wss.clients.forEach(c => { if (c.readyState === 1) c.send(msg); });
 }
 
-function readBody(req) {
-  return new Promise(res => {
+// Cache static assets at startup to avoid repeated disk I/O per request
+const indexHtml = fs.readFileSync(path.join(__dirname, "index.html"));
+const staticCache = new Map(); // ext → Buffer
+
+function readBody(req, maxBytes = 65536) {
+  return new Promise((res, rej) => {
     let buf = "";
-    req.on("data", c => (buf += c));
+    let size = 0;
+    req.on("data", c => {
+      size += c.length;
+      if (size > maxBytes) { req.destroy(); rej(new Error("request body too large")); return; }
+      buf += c;
+    });
     req.on("end", () => res(buf));
   });
 }
@@ -550,9 +565,8 @@ const server = http.createServer(async (req, res) => {
   }
 
   if (method === "GET" && url === "/") {
-    const html = fs.readFileSync(path.join(__dirname, "index.html"));
     res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
-    return res.end(html);
+    return res.end(indexHtml);
   }
 
   const MIME = { ".css": "text/css", ".js": "application/javascript" };
@@ -561,8 +575,9 @@ const server = http.createServer(async (req, res) => {
     const safePath = path.normalize(url).replace(/^(\.\.[\/\\])+/, '');
     const filePath = path.join(__dirname, "public", safePath);
     if (filePath.startsWith(path.join(__dirname, "public")) && fs.existsSync(filePath)) {
+      if (!staticCache.has(filePath)) staticCache.set(filePath, fs.readFileSync(filePath));
       res.writeHead(200, { "Content-Type": MIME[ext] + "; charset=utf-8" });
-      return res.end(fs.readFileSync(filePath));
+      return res.end(staticCache.get(filePath));
     }
   }
 
@@ -646,8 +661,8 @@ const server = http.createServer(async (req, res) => {
     const { ok, body } = await parseBody(req);
     if (!ok || !body) return json(res, 400, { error: "invalid request body" });
     const { id, text } = body;
-    const ok = sendInput(id, text);
-    return json(res, 200, { ok });
+    const inputOk = sendInput(id, text);
+    return json(res, 200, { ok: inputOk });
   }
 
   if (method === "POST" && url === "/api/remove") {

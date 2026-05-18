@@ -17,6 +17,7 @@ TermHub는 현재 활발히 개발 중이며, 일부 버그나 미완성된 부�
 - **실시간 로그** — tmux 출력을 실시간으로 캡처 및 표시
 - **AI 상태 감지** — 터미널 출력을 분석하여 AI 상태를 자동 감지:
   - 🔵 작업 중 → 🟢 대기 → 🟡 결정 필요 (권한 요청)
+- **Telegram 대기 알림** — AI CLI가 입력을 기다릴 때 Telegram으로 아웃바운드 알림
 - **양방향 미러링** — 대시보드와 로컬 터미널에서 동일 세션을 동시에 확인
 
 ### 부가 기능
@@ -93,11 +94,24 @@ cloudflared tunnel --url http://localhost:8081         # 터널 시작 (선택, 
 brew install cloudflared
 ```
 
-2. 끝 — TermHub가 서버 시작 시 자동으로 Cloudflare 터널을 실행합니다. 터널 URL은:
+2. 끝 — `cloudflared`가 PATH에 설치되어 있으면 TermHub가 서버 시작 시 자동으로 Cloudflare 터널을 실행합니다. 터널 URL은:
 
 - 서버 로그에 출력 (`☁️  Tunnel URL → https://...`)
 - API로 조회 가능: `GET /api/tunnel`
 - WebSocket으로 연결된 클라이언트에 브로드캐스트
+
+**터널 자동 실행 비활성화** (원격 접근이 필요 없거나 수동으로 실행하고 싶은 경우):
+
+```env
+# .env
+ENABLE_TUNNEL=0
+```
+
+또는 `config.json`에서:
+
+```json
+{ "tunnel": { "enabled": false } }
+```
 
 3. (선택) **Discord 알림** — `.env`에 webhook URL을 추가하면 서버 시작 시 터널 URL이 Discord로 전송됩니다:
 
@@ -160,6 +174,43 @@ tmux attach -t term-2   # 워커 #2
 - 실행 중: **Stop** 버튼 — tmux 세션 종료
 - 중지됨: **Remove** 버튼 — 대시보드에서 제거
 
+## AI 대기 상태 모니터링
+
+TermHub는 tmux 세션을 감시하여 Claude Code, Codex CLI, Gemini CLI, aider 등의 AI CLI가 사용자 입력을 기다리는 상태를 설정 가능한 정규식 규칙으로 자동 감지합니다.
+
+- 폴링 간격 및 스캔 깊이 설정 가능
+- 정규식 패턴 설정 가능 (`config.json` → `aiMonitor.patterns`)
+- Telegram 아웃바운드 알림 (아웃바운드 전용 — 콜백 버튼 없음), 중복 알림 방지(디바운스) 적용
+- 워커 카드 메타데이터 행:
+  - 마지막 활동 시각
+  - 마지막으로 감지된 프롬프트/패턴
+  - 마지막 알림 상태 및 시각
+
+### Telegram 알림 설정
+
+`.env`에 아래 두 변수를 설정하면 아웃바운드 알림이 활성화됩니다:
+
+```env
+TELEGRAM_BOT_TOKEN=<bot-token>
+TELEGRAM_CHAT_ID=<chat-id>
+```
+
+Telegram 변수를 설정하지 않으면 UI에서 대기 상태 감지는 계속 동작하며, 알림 전송 단계만 안전하게 건너뜁니다.
+
+### 모니터 튜닝
+
+모든 설정은 선택 사항이며, 기본값으로도 바로 동작합니다.
+
+| 변수 | 기본값 | 설명 |
+|---|---|---|
+| `AI_MONITOR_ENABLED` | `1` | `0`으로 설정하면 모니터링 완전 비활성화 |
+| `AI_MONITOR_POLL_INTERVAL_MS` | `1000` | tmux 패인 캡처 간격 (ms) |
+| `AI_MONITOR_IDLE_THRESHOLD_MS` | `5000` | 출력 변화 없을 때 idle로 전환까지 대기 시간 (ms) |
+| `AI_MONITOR_LINES_TO_SCAN` | `120` | 패턴 검사에 사용할 최근 라인 수 |
+| `AI_MONITOR_NOTIFY_COOLDOWN_MS` | `120000` | 동일 알림 중복 방지 대기 시간 (ms) |
+
+`config.json` → `aiMonitor` 객체로도 모든 값을 재정의할 수 있습니다 (`config.example.json` 참고).
+
 ## 파일 구조
 
 ```
@@ -167,6 +218,11 @@ termhub/
 ├── server.js              # Node.js 서버 (tmux 관리, WebSocket)
 ├── index.html             # 웹 UI 진입점
 ├── setup.sh               # 원스텝 셋업 스크립트
+├── lib/
+│   ├── patternEngine.js   # 정규식 대기 상태 감지
+│   ├── watcherEngine.js   # 폴링 루프 + 상태 전환
+│   ├── telegramService.js # Telegram 아웃바운드 알림
+│   └── sessionStateManager.js  # 메타데이터 + 디바운스 + 영속화
 ├── public/
 │   ├── style.css          # 스타일
 │   └── js/
@@ -175,9 +231,13 @@ termhub/
 │       ├── ws.js          # WebSocket & API 통신
 │       ├── workers.js     # 워커 카드 UI & 액션
 │       └── app.js         # 초기화 & 이벤트 바인딩
+├── state/
+│   └── session-state.json # 런타임 모니터링 메타데이터 스냅샷 (자동 생성)
 ├── config.json            # 사용자 설정 (gitignored)
 ├── config.example.json    # 설정 템플릿
 ├── .env                   # 환경 변수 (gitignored)
+├── .env.example           # 환경 변수 템플릿
+├── docker-compose.yml     # 선택적 Docker 배포
 ├── .gitignore
 ├── package.json
 ├── README.md              # English
