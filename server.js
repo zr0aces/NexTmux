@@ -50,9 +50,16 @@ function createToken() {
   return Math.random().toString(36).slice(2) + Date.now().toString(36);
 }
 
+function sanitizeSessionName(name) {
+  if (typeof name !== "string" || !/^[a-zA-Z0-9_:-]+$/.test(name)) {
+    throw new Error(`Unsafe tmux session name rejected: ${JSON.stringify(name)}`);
+  }
+  return name;
+}
+
 function isAlive(sessionName) {
   try {
-    execSync(`tmux has-session -t ${sessionName}`, { encoding: "utf8", stdio: "pipe" });
+    execFileSync("tmux", ["has-session", "-t", sessionName], { encoding: "utf8", stdio: "pipe" });
     return true;
   } catch (e) {
     return false;
@@ -61,6 +68,13 @@ function isAlive(sessionName) {
 
 function tmux(cmd) {
   try { return execSync("tmux " + cmd, { encoding: "utf8", stdio: "pipe" }); }
+  catch (e) { return ""; }
+}
+
+// Safe alternative: spawn tmux with explicit arg array — no shell interpretation.
+// Use for all calls that include user-supplied values (sessionName, cwd, cmd, key).
+function tmuxExec(...args) {
+  try { return execFileSync("tmux", args, { encoding: "utf8", stdio: "pipe" }); }
   catch (e) { return ""; }
 }
 
@@ -280,8 +294,8 @@ function spawnWorker(cwd, cmd) {
   cmd = cmd || appConfig.defaultCommand || "claude";
   const id = String(nextId++);
   const sessionName = "term-" + id;
-  tmux(`new-session -d -s ${sessionName} -c "${cwd}" -e CLAUDECODE=`);
-  tmux(`send-keys -t ${sessionName} ${JSON.stringify(cmd)} Enter`);
+  tmuxExec("new-session", "-d", "-s", sessionName, "-c", cwd, "-e", "CLAUDECODE=");
+  tmuxExec("send-keys", "-t", sessionName, cmd, "Enter");
   const logs = [];
   workers.set(id, {
     sessionName,
@@ -386,15 +400,15 @@ function pollOutput(id) {
   const rows = w.rows || 50;
   // Only resize when dimensions actually changed to avoid unnecessary tmux calls
   if (cols !== w._lastCols || rows !== w._lastRows) {
-    tmux(`resize-pane -t ${w.sessionName} -x ${cols} -y ${rows}`);
-    tmux(`resize-window -t ${w.sessionName} -x ${cols} -y ${rows}`);
+    tmuxExec("resize-pane", "-t", w.sessionName, "-x", String(cols), "-y", String(rows));
+    tmuxExec("resize-window", "-t", w.sessionName, "-x", String(cols), "-y", String(rows));
     w._lastCols = cols;
     w._lastRows = rows;
   }
-  const output = tmux(`capture-pane -t ${w.sessionName} -p -S -500 -J`);
+  const output = tmuxExec("capture-pane", "-t", w.sessionName, "-p", "-S", "-500", "-J");
 
   // Fetch cwd and pane command in a single tmux call (saves one sub-process per poll)
-  const _info = tmux(`display-message -t ${w.sessionName} -p "#{pane_current_path}|||#{pane_current_command}"`).trim().split("|||");
+  const _info = tmuxExec("display-message", "-t", w.sessionName, "-p", "#{pane_current_path}|||#{pane_current_command}").trim().split("|||");
   const currentCwd = _info[0] || "";
   const currentPaneCmd = _info[1] || "";
   if (currentCwd && currentCwd !== w.cwd) {
@@ -476,8 +490,8 @@ function sendInput(id, text) {
   }
   const lines = text.split("\n");
   for (const line of lines) {
-    tmux(`send-keys -t ${w.sessionName} "${line.replace(/"/g, '\\"')}" ""`);
-    tmux(`send-keys -t ${w.sessionName} "" Enter`);
+    tmuxExec("send-keys", "-t", w.sessionName, line, "");
+    tmuxExec("send-keys", "-t", w.sessionName, "", "Enter");
   }
   rememberAction(w, "input", "text");
   broadcast({ type: "log", id, src: "stdin", text, ts: Date.now() });
@@ -490,7 +504,7 @@ function killWorker(id, reason) {
   if (w.pollTimer) clearInterval(w.pollTimer);
   w.pollTimer = null;
   rememberAction(w, "stop_button", "kill-session");
-  tmux(`kill-session -t ${w.sessionName}`);
+  tmuxExec("kill-session", "-t", w.sessionName);
   w.status = 'stopped';
   w.aiState = null;
   sessionStateManager.setWaitingState(w, "disconnected");
@@ -621,7 +635,14 @@ const server = http.createServer(async (req, res) => {
   if (method === "POST" && url === "/api/attach") {
     const { ok, body } = await parseBody(req);
     if (!ok || !body) return json(res, 400, { error: "invalid request body" });
-    const { sessionName, cwd } = body;
+    const rawSessionName = String(body.sessionName || "");
+    let sessionName;
+    try {
+      sessionName = sanitizeSessionName(rawSessionName);
+    } catch {
+      return json(res, 400, { error: "invalid sessionName" });
+    }
+    const cwd = body.cwd;
     const id = String(nextId++);
     workers.set(id, {
       sessionName,
@@ -696,7 +717,7 @@ const server = http.createServer(async (req, res) => {
         broadcastMonitorMeta(id);
       }
       rememberAction(w, "special_key", key);
-      tmux(`send-keys -t ${w.sessionName} ${key}`);
+      tmuxExec("send-keys", "-t", w.sessionName, String(key));
     }
     return json(res, 200, { ok: true });
   }
@@ -855,6 +876,7 @@ function recoverSessions() {
     const id = sessionName.replace("term-", "");
     const numId = parseInt(id);
     if (isNaN(numId)) continue;
+    try { sanitizeSessionName(sessionName); } catch { continue; }
     if (workers.has(id)) continue;
     workers.set(id, {
       sessionName,
