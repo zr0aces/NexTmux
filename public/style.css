@@ -414,6 +414,24 @@ header h1 {
   background: #2f2400;
 }
 
+.monitor-meta {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  font-size: 10px;
+  color: #8b949e;
+  padding: 4px 12px;
+  border-bottom: 1px solid #21262d;
+  background: #11161c;
+}
+
+.monitor-meta span {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 33%;
+}
+
 .badge {
   font-size: 11px;
   padding: 2px 7px;

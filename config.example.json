@@ -4,5 +4,24 @@
     "/Users/yourname/Desktop/my-project-1",
     "/Users/yourname/Desktop/my-project-2"
   ],
-  "defaultCommand": "claude"
+  "defaultCommand": "claude",
+  "aiMonitor": {
+    "enabled": true,
+    "pollIntervalMs": 1000,
+    "idleThresholdMs": 5000,
+    "linesToInspect": 120,
+    "notifyCooldownMs": 120000,
+    "patterns": [
+      { "name": "continue", "regex": "continue\\?" },
+      { "name": "proceed", "regex": "proceed\\?" },
+      { "name": "confirmation", "regex": "\\[y/N\\]" },
+      { "name": "yes_no", "regex": "yes/no" },
+      { "name": "press_enter", "regex": "press enter" },
+      { "name": "approve", "regex": "approve\\?" },
+      { "name": "confirm", "regex": "confirm\\?" },
+      { "name": "retry", "regex": "retry\\?" },
+      { "name": "token_limit", "regex": "token limit reached" },
+      { "name": "auth_required", "regex": "authentication required" }
+    ]
+  }
 }

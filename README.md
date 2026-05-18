@@ -19,6 +19,7 @@ Contributions and bug reports are very welcome.
 - **Real-time logs** — captures and displays tmux output in real time
 - **AI state detection** — automatically detects AI CLI state from terminal output:
   - 🔵 Working → 🟢 Idle → 🟡 Waiting (permission needed)
+- **Telegram wait alerts (MVP)** — sends outbound notifications when an AI CLI is waiting for human input
 - **Two-way mirroring** — view the same session from both the dashboard and your local terminal
 
 ### More
@@ -161,6 +162,40 @@ Use the **Tab / Split** buttons in the header. Your choice is saved in the brows
 ### Stop and remove workers
 - Running: **Stop** button — terminates the tmux session
 - Stopped: **Remove** button — removes from the dashboard
+
+## AI wait-state monitoring (MVP)
+
+TermHub can supervise tmux sessions and detect wait prompts from Claude Code, Codex CLI, Gemini CLI, aider, and OpenHands-style workflows using regex rules.
+
+- Configurable polling interval and scan depth
+- Configurable regex patterns (`config.json` → `aiMonitor.patterns`)
+- Debounced notifications to Telegram (outbound only)
+- Worker card metadata:
+  - last activity timestamp
+  - last matched prompt/pattern
+  - last notification status/time
+
+### Required environment variables for Telegram notifications
+
+```env
+TELEGRAM_BOT_TOKEN=<bot-token>
+TELEGRAM_CHAT_ID=<chat-id>
+```
+
+If Telegram variables are not set, wait detection still works in UI but notification sending is skipped safely.
+
+## Docker Compose (optional)
+
+An optional `docker-compose.yml` is included for lightweight deployment:
+
+```bash
+docker compose up -d
+```
+
+Notes:
+- Compose mounts `./state` to persist monitoring metadata snapshots.
+- `tmux` must be available in the same runtime namespace where sessions are monitored.
+- TermHub must be able to see the tmux socket/session namespace it supervises.
 
 ## File Structure
 

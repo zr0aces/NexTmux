@@ -46,7 +46,7 @@ function killBtnHtml(id, status) {
   return '<button class="kill-btn" id="kill-' + id + '">Stop</button>';
 }
 
-function ensureCard(id, cwd, status, logs, cmd, reason) {
+function ensureCard(id, cwd, status, logs, cmd, reason, monitorMeta) {
   if (document.getElementById('card-' + id)) return;
 
   const cmdLabel = cmd || 'claude';
@@ -62,6 +62,11 @@ function ensureCard(id, cwd, status, logs, cmd, reason) {
     '</div>' +
     '<div class="card-cwd">' + displayPath(cwd) + '</div>' +
     '<div class="exit-reason" id="exit-reason-' + id + '"></div>' +
+    '<div class="monitor-meta" id="meta-' + id + '">' +
+      '<span id="meta-activity-' + id + '">Activity: -</span>' +
+      '<span id="meta-pattern-' + id + '">Prompt: -</span>' +
+      '<span id="meta-notify-' + id + '">Notify: -</span>' +
+    '</div>' +
     '<div class="logs" id="logs-' + id + '"></div>' +
     '<div class="input-row" id="input-row-' + id + '"' + (status === 'stopped' || status === 'completed' ? ' style="display:none"' : '') + '>' +
       '<textarea id="inp-' + id + '" placeholder="Enter command..." rows="1"></textarea>' +
@@ -134,6 +139,7 @@ function ensureCard(id, cwd, status, logs, cmd, reason) {
   if (logs) logs.forEach(l => appendLog(id, l.src, l.text));
   if (reason) updateExitReason(id, reason);
   if (status === 'running') updateExitReason(id, null);
+  if (monitorMeta) updateMonitorMeta(id, monitorMeta);
   setTimeout(sendResize, 100);
 }
 
@@ -314,6 +320,39 @@ function updateAIState(id, state) {
     } else {
       el.textContent = 'running';
     }
+  });
+}
+
+function formatMetaTime(iso) {
+  if (!iso) return '-';
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '-';
+  return d.toLocaleTimeString();
+}
+
+function trimPrompt(prompt) {
+  if (!prompt) return '-';
+  const oneLine = String(prompt).replace(/\s+/g, ' ').trim();
+  if (!oneLine) return '-';
+  return oneLine.length > 52 ? oneLine.slice(0, 51) + '…' : oneLine;
+}
+
+function updateMonitorMeta(id, meta) {
+  const activity = formatMetaTime(meta.lastActivityAt);
+  const prompt = trimPrompt(meta.lastPromptExcerpt || meta.matchedText);
+  const status = meta.notificationStatus || '-';
+  const notifyAt = formatMetaTime(meta.lastNotificationAt);
+
+  document.querySelectorAll('#meta-activity-' + id).forEach(el => {
+    el.textContent = 'Activity: ' + activity;
+  });
+  document.querySelectorAll('#meta-pattern-' + id).forEach(el => {
+    const pattern = meta.lastMatchedPattern ? '[' + meta.lastMatchedPattern + '] ' : '';
+    el.textContent = 'Prompt: ' + pattern + prompt;
+    el.title = meta.lastPromptExcerpt || '';
+  });
+  document.querySelectorAll('#meta-notify-' + id).forEach(el => {
+    el.textContent = 'Notify: ' + status + (notifyAt !== '-' ? ' @ ' + notifyAt : '');
   });
 }
 

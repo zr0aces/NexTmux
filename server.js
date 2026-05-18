@@ -5,6 +5,10 @@ const { execSync, execFileSync, spawn } = require("child_process");
 const fs = require("fs");
 const path = require("path");
 const { WebSocketServer } = require("ws");
+const { DEFAULT_PATTERNS, createPatternEngine } = require("./lib/patternEngine");
+const { createTelegramService } = require("./lib/telegramService");
+const { createSessionStateManager } = require("./lib/sessionStateManager");
+const { createWatcherEngine } = require("./lib/watcherEngine");
 
 const PORT = process.env.PORT || 8081;
 const PASSWORD = process.env.DASHBOARD_PASSWORD || "changeme";
@@ -14,6 +18,8 @@ const DISCORD_ALERT_WEBHOOK = process.env.DISCORD_ALERT_WEBHOOK;
 const ALERT_WEBHOOK = DISCORD_ALERT_WEBHOOK || DISCORD_WEBHOOK;
 const ENABLE_PREVIEW = process.env.ENABLE_PREVIEW === "1";
 const PREVIEW_TUNNEL = process.env.PREVIEW_TUNNEL === "1";
+const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
+const TELEGRAM_CHAT_ID = process.env.TELEGRAM_CHAT_ID;
 
 // workerId(문자열) → Set<number> : 워커별 감지된 포트 목록
 const detectedPorts = new Map();
@@ -60,6 +66,47 @@ function loadConfig() {
   const configPath = path.join(__dirname, "config.json");
   return fs.existsSync(configPath) ? JSON.parse(fs.readFileSync(configPath, "utf8")) : {};
 }
+
+function toBool(value, fallback = false) {
+  if (value === undefined || value === null || value === "") return fallback;
+  return String(value) === "1" || String(value).toLowerCase() === "true";
+}
+
+function toNumber(value, fallback) {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : fallback;
+}
+
+function buildMonitorConfig(config) {
+  const cfg = config?.aiMonitor || {};
+  return {
+    enabled: toBool(process.env.AI_MONITOR_ENABLED, cfg.enabled !== false),
+    pollIntervalMs: Math.max(250, toNumber(process.env.AI_MONITOR_POLL_INTERVAL_MS, cfg.pollIntervalMs || 1000)),
+    idleThresholdMs: Math.max(1000, toNumber(process.env.AI_MONITOR_IDLE_THRESHOLD_MS, cfg.idleThresholdMs || 5000)),
+    linesToInspect: Math.max(10, toNumber(process.env.AI_MONITOR_LINES_TO_SCAN, cfg.linesToInspect || 120)),
+    notifyCooldownMs: Math.max(1000, toNumber(process.env.AI_MONITOR_NOTIFY_COOLDOWN_MS, cfg.notifyCooldownMs || 120000)),
+    patterns: Array.isArray(cfg.patterns) && cfg.patterns.length ? cfg.patterns : DEFAULT_PATTERNS,
+  };
+}
+
+const appConfig = loadConfig();
+const monitorConfig = buildMonitorConfig(appConfig);
+const patternEngine = createPatternEngine({
+  patterns: monitorConfig.patterns,
+  linesToInspect: monitorConfig.linesToInspect,
+});
+const sessionStateManager = createSessionStateManager({
+  notifyCooldownMs: monitorConfig.notifyCooldownMs,
+  stateFilePath: path.join(__dirname, "state", "session-state.json"),
+});
+const watcherEngine = createWatcherEngine({
+  patternEngine,
+  options: { enabled: monitorConfig.enabled, idleThresholdMs: monitorConfig.idleThresholdMs },
+});
+const telegramService = createTelegramService({
+  botToken: TELEGRAM_BOT_TOKEN,
+  chatId: TELEGRAM_CHAT_ID,
+});
 
 function getBaseCommand(cmd) {
   if (!cmd) return "";
@@ -189,7 +236,32 @@ function startPolling(id) {
   const w = workers.get(id);
   if (!w) return;
   if (w.pollTimer) clearInterval(w.pollTimer);
-  w.pollTimer = setInterval(() => pollOutput(id), 1000);
+  w.pollTimer = setInterval(() => pollOutput(id), monitorConfig.pollIntervalMs);
+}
+
+function initializeWorkerMonitorState(worker) {
+  if (!worker) return;
+  worker.lastActivityAt = worker.lastActivityAt || null;
+  worker.waitingState = worker.waitingState || "running";
+  worker.lastMatchedPattern = worker.lastMatchedPattern || null;
+  worker.lastPromptExcerpt = worker.lastPromptExcerpt || null;
+  worker.lastNotificationAt = worker.lastNotificationAt || null;
+  worker.notificationStatus = worker.notificationStatus || null;
+  sessionStateManager.hydrateWorker(worker);
+}
+
+function getMonitorMeta(worker) {
+  return sessionStateManager.getApiMeta(worker);
+}
+
+function broadcastMonitorMeta(id) {
+  const worker = workers.get(id);
+  if (!worker) return;
+  const nextMeta = getMonitorMeta(worker);
+  const nextKey = JSON.stringify(nextMeta);
+  if (worker.lastMetaBroadcastKey === nextKey) return;
+  worker.lastMetaBroadcastKey = nextKey;
+  broadcast({ type: "monitorMeta", id, ...nextMeta });
 }
 
 function spawnWorker(cwd, cmd) {
@@ -212,22 +284,10 @@ function spawnWorker(cwd, cmd) {
     lastPaneCommand: null,
     lastAction: null,
   });
+  initializeWorkerMonitorState(workers.get(id));
   startPolling(id);
-  broadcast({ type: "spawned", id, cwd, cmd, status: "running", sessionName });
+  broadcast({ type: "spawned", id, cwd, cmd, status: "running", sessionName, ...getMonitorMeta(workers.get(id)) });
   return id;
-}
-
-function detectWaiting(output) {
-  const lines = output.split("\n");
-  const recent = lines.slice(-10).join("\n");
-  // Common permission/decision patterns across AI CLIs
-  if (/Esc to cancel/.test(recent)) return true;
-  if (/Do you want to proceed\?/.test(recent)) return true;
-  if (/❯\s*\d+\.\s*(Yes|No)/.test(recent)) return true;
-  if (/Allow/.test(recent) && /\?/.test(recent)) return true;
-  if (/\([Yy]\/[Nn]\)/.test(recent) || /\[[Yy]\/[Nn]\]/.test(recent) || /\[[yY]\/[nN]\]/.test(recent)) return true;
-  if (/approve|confirm|accept/i.test(recent) && /\?/.test(recent)) return true;
-  return false;
 }
 
 function sendIssueAlert({ key, title, description, color = 0xf0ad4e, fields = [] }) {
@@ -256,26 +316,44 @@ function sendIssueAlert({ key, title, description, color = 0xf0ad4e, fields = []
   });
 }
 
-function sendWaitingAlert(id) {
+function sendWaitingAlert(id, detection, now = Date.now()) {
   const w = workers.get(id);
   if (!w) return;
 
-  // 쿨다운은 sendIssueAlert의 ISSUE_ALERT_COOLDOWN_MS(120초)에서 일괄 관리
-  sendIssueAlert({
-    key: `worker-waiting-${id}`,
-    title: `⏳ Waiting — Worker #${id}`,
-    description: "Worker requires user action/approval.",
-    color: 0xf0ad4e,
-    fields: [
-      { name: "Issue", value: "AI session is waiting for input/approval.", inline: false },
-      { name: "Command", value: w.cmd || "unknown", inline: true },
-      { name: "Directory", value: w.cwd || "unknown", inline: true },
-      { name: "Session", value: w.sessionName || "unknown", inline: true },
-    ],
+  const decision = sessionStateManager.shouldNotify({
+    sessionName: w.sessionName,
+    patternName: detection?.patternName || "waiting",
+    excerpt: detection?.excerpt || "",
+    now,
+  });
+  if (!decision.shouldSend) {
+    sessionStateManager.markNotification(w, "skipped_debounce", now);
+    broadcastMonitorMeta(id);
+    return;
+  }
+
+  telegramService.sendWaitingNotification({
+    sessionName: w.sessionName,
+    patternName: detection?.patternName,
+    matchedText: detection?.matchedText,
+    excerpt: detection?.excerpt || w.lastPromptExcerpt || "",
+    timestamp: new Date(now).toISOString(),
+  }).then((result) => {
+    if (result.ok) {
+      sessionStateManager.markNotification(w, "sent", now);
+    } else if (result.skipped) {
+      sessionStateManager.markNotification(w, "skipped_debounce", now);
+    } else {
+      sessionStateManager.markNotification(w, "failed", now);
+      console.warn(`Telegram waiting alert failed for ${w.sessionName}: ${result.error || "unknown_error"}`);
+    }
+    broadcastMonitorMeta(id);
+  }).catch((err) => {
+    sessionStateManager.markNotification(w, "failed", now);
+    broadcastMonitorMeta(id);
+    console.warn(`Telegram waiting alert exception for ${w.sessionName}:`, err?.message || err);
   });
 }
-
-const IDLE_THRESHOLD = 5000; // 5 seconds of no output change → idle
 
 let lastCapture = {};
 
@@ -287,8 +365,10 @@ function pollOutput(id) {
     w.pollTimer = null;
     w.status = 'completed';
     w.aiState = null;
+    sessionStateManager.setWaitingState(w, "disconnected");
     w.exitReason = w.exitReason || inferExitReason(w, "tmux session ended or was killed externally.");
     broadcast({ type: "status", id, status: "completed", reason: w.exitReason });
+    broadcastMonitorMeta(id);
     return;
   }
   const cols = w.cols || 80;
@@ -313,46 +393,56 @@ function pollOutput(id) {
       w.pollTimer = null;
       w.status = "completed";
       w.aiState = null;
+      sessionStateManager.setWaitingState(w, "disconnected");
       w.exitReason = inferExitReason(w, `Command '${w.expectedCmd}' exited and returned to shell '${currentPaneCmd}'.`);
       broadcast({ type: "status", id, status: "completed", reason: w.exitReason });
+      broadcastMonitorMeta(id);
       return;
     }
   }
 
-  if (output === lastCapture[id]) {
-    // Output unchanged — 대기 중인 포트 재시도
+  const now = Date.now();
+  const inspect = watcherEngine.inspect({
+    output,
+    previousOutput: lastCapture[id],
+    currentState: w.aiState || "running",
+    lastChangeTime: w.lastChangeTime,
+    now,
+  });
+
+  // Output unchanged — pending port detection retry
+  if (!inspect.changed) {
     detectPorts(id, output);
-    // check if idle threshold reached
-    if (w.aiState !== 'idle' && w.aiState !== 'waiting' && w.lastChangeTime) {
-      const elapsed = Date.now() - w.lastChangeTime;
-      if (elapsed >= IDLE_THRESHOLD) {
-        const waiting = detectWaiting(output);
-        const newState = waiting ? 'waiting' : 'idle';
-        if (newState !== w.aiState) {
-          w.aiState = newState;
-          broadcast({ type: "aiState", id, state: newState });
-          if (newState === 'waiting') sendWaitingAlert(id);
-        }
-      }
-    }
-    return;
+  } else {
+    lastCapture[id] = output;
+    detectPorts(id, output);
+    w.lastChangeTime = now;
+    sessionStateManager.updateActivity(w, now);
+    const lines = output.split("\n");
+    w.logs = lines.slice(-200).map(text => ({ src: "stdout", text, ts: now }));
+    broadcast({ type: "snapshot", id, lines });
   }
 
-  lastCapture[id] = output;
-  detectPorts(id, output);
-  w.lastChangeTime = Date.now();
-  const lines = output.split("\n");
-  w.logs = lines.slice(-200).map(text => ({ src: "stdout", text, ts: Date.now() }));
-  broadcast({ type: "snapshot", id, lines });
-
-  // Output just changed — check for waiting, otherwise working
-  const waiting = detectWaiting(output);
-  const aiState = waiting ? 'waiting' : 'working';
-  if (aiState !== w.aiState) {
-    w.aiState = aiState;
-    broadcast({ type: "aiState", id, state: aiState });
-    if (aiState === 'waiting') sendWaitingAlert(id);
+  if (inspect.detection?.matched) {
+    sessionStateManager.updateMatch(w, inspect.detection);
   }
+
+  const nextState = inspect.nextState || "running";
+  const stateChanged = nextState !== w.aiState;
+  if (stateChanged) {
+    w.aiState = nextState;
+    broadcast({ type: "aiState", id, state: nextState });
+  }
+
+  if (nextState === "waiting" || nextState === "idle" || nextState === "running") {
+    sessionStateManager.setWaitingState(w, nextState);
+  }
+
+  if (inspect.detection?.matched && nextState === "waiting" && (stateChanged || inspect.changed)) {
+    sendWaitingAlert(id, inspect.detection, now);
+  }
+
+  broadcastMonitorMeta(id);
 }
 
 function sendInput(id, text) {
@@ -362,8 +452,10 @@ function sendInput(id, text) {
     w.status = "running";
     w.aiState = null;
     w.exitReason = null;
+    sessionStateManager.setWaitingState(w, "running");
     startPolling(id);
     broadcast({ type: "status", id, status: "running", reason: null });
+    broadcastMonitorMeta(id);
   }
   const lines = text.split("\n");
   for (const line of lines) {
@@ -384,8 +476,10 @@ function killWorker(id, reason) {
   tmux(`kill-session -t ${w.sessionName}`);
   w.status = 'stopped';
   w.aiState = null;
+  sessionStateManager.setWaitingState(w, "disconnected");
   w.exitReason = reason || "Stopped from dashboard.";
   broadcast({ type: "status", id, status: "stopped", reason: w.exitReason });
+  broadcastMonitorMeta(id);
   return true;
 }
 
@@ -470,7 +564,8 @@ const server = http.createServer(async (req, res) => {
       sessionName: w.sessionName,
       logs: w.logs,
       aiState: w.aiState || null,
-      exitReason: w.exitReason || null
+      exitReason: w.exitReason || null,
+      ...getMonitorMeta(w),
     }));
     return json(res, 200, list);
   }
@@ -502,8 +597,9 @@ const server = http.createServer(async (req, res) => {
       lastPaneCommand: null,
       lastAction: null,
     });
+    initializeWorkerMonitorState(workers.get(id));
     startPolling(id);
-    broadcast({ type: "spawned", id, cwd, status: "running", sessionName });
+    broadcast({ type: "spawned", id, cwd, status: "running", sessionName, ...getMonitorMeta(workers.get(id)) });
     return json(res, 200, { id });
   }
 
@@ -535,9 +631,9 @@ const server = http.createServer(async (req, res) => {
     if (w) {
       if (w.pollTimer) clearInterval(w.pollTimer);
       cleanupPreviewPorts(id);
-      // 워커 관련 alert 쿨다운 키 정리 (issueAlertTime 무한 누적 방지)
-      issueAlertTime.delete(`worker-waiting-${id}`);
+      sessionStateManager.removeSession(w.sessionName);
       workers.delete(id);
+      delete lastCapture[id];
     }
     return json(res, 200, { ok: true });
   }
@@ -550,8 +646,10 @@ const server = http.createServer(async (req, res) => {
         w.status = "running";
         w.aiState = null;
         w.exitReason = null;
+        sessionStateManager.setWaitingState(w, "running");
         startPolling(id);
         broadcast({ type: "status", id, status: "running", reason: null });
+        broadcastMonitorMeta(id);
       }
       rememberAction(w, "special_key", key);
       tmux(`send-keys -t ${w.sessionName} ${key}`);
@@ -569,8 +667,10 @@ const server = http.createServer(async (req, res) => {
       w.aiState = null;
       w.exitReason = null;
       w.seenExpectedCmd = false;
+      sessionStateManager.setWaitingState(w, "running");
       startPolling(id);
       broadcast({ type: "status", id, status: "running", reason: null });
+      broadcastMonitorMeta(id);
       return json(res, 200, { ok: true });
     }
     return json(res, 200, { ok: false });
@@ -720,6 +820,7 @@ function recoverSessions() {
       lastPaneCommand: null,
       lastAction: null,
     });
+    initializeWorkerMonitorState(workers.get(id));
     startPolling(id);
     if (numId >= nextId) nextId = numId + 1;
   }
@@ -899,6 +1000,8 @@ server.listen(PORT, () => {
   console.log(`✅ TermHub running → http://localhost:${PORT}`);
   console.log(`🔑 Password: ${PASSWORD}`);
   console.log(`📺 View tmux session: tmux attach -t term-1`);
+  console.log(`👀 AI monitor: ${monitorConfig.enabled ? "enabled" : "disabled"} (poll=${monitorConfig.pollIntervalMs}ms, lines=${monitorConfig.linesToInspect})`);
+  console.log(`📨 Telegram alerts: ${telegramService.enabled ? "configured" : "not configured"}`);
   startTunnel();
   if (ENABLE_TUNNEL_HEALTHCHECK) {
     setInterval(checkTunnel, 60000);
