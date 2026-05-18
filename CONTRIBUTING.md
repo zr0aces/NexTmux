@@ -20,7 +20,7 @@ npm start
 
 - Follow the existing code style and file structure.
 - Avoid unrelated refactors in the same pull request.
-- Update `README.md` and `README.ko.md` if behavior or setup changes.
+- Update `README.md` and related `/docs` files if behavior or setup changes.
 
 ## Commit and PR guidelines
 
