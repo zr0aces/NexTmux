@@ -5,7 +5,7 @@ const { execSync, execFileSync, spawn } = require("child_process");
 const fs = require("fs");
 const path = require("path");
 const { WebSocketServer } = require("ws");
-const { DEFAULT_PATTERNS, createPatternEngine } = require("./lib/patternEngine");
+const { DEFAULT_PATTERNS, createPatternEngine, extractResetTime } = require("./lib/patternEngine");
 const { createTelegramService } = require("./lib/telegramService");
 const { createSessionStateManager } = require("./lib/sessionStateManager");
 const { createWatcherEngine } = require("./lib/watcherEngine");
@@ -23,11 +23,11 @@ const TELEGRAM_CHAT_ID = process.env.TELEGRAM_CHAT_ID;
 // ENABLE_TUNNEL: env takes precedence; config fallback resolved after loadConfig()
 // Resolved into TUNNEL_ENABLED below, after appConfig is loaded.
 
-// workerId(문자열) → Set<number> : 워커별 감지된 포트 목록
+// workerId (string) → Set<number> : ports detected per worker
 const detectedPorts = new Map();
-// port(number) → { process, url } : 포트별 cloudflared 터널 상태
+// port (number) → { process, url } : cloudflared tunnel state per port
 const previewTunnels = new Map();
-// localhost 포트 감지 정규식
+// Regex for detecting localhost port references in terminal output
 const PORT_PATTERN = /(?:https?:\/\/)?(?:localhost|127\.0\.0\.1):(\d{2,5})/g;
 
 if (PASSWORD === "changeme") {
@@ -160,7 +160,7 @@ function inferExitReason(w, fallback) {
   return fallback || "Session exited (reason unknown).";
 }
 
-// DB·인프라 서비스의 대표 포트 — 미리보기 대상에서 제외 (false positive 방지)
+// Well-known infrastructure service ports — excluded from preview detection to avoid false positives
 const EXCLUDED_PORTS = new Set([
   3306,  // MySQL
   5432,  // PostgreSQL
@@ -189,16 +189,15 @@ function checkPortListening(port) {
       sock.connect(port, host);
     });
   }
-  // IPv4 먼저, 실패하면 IPv6
   return tryConnect("127.0.0.1").then((ok) => ok ? true : tryConnect("::1"));
 }
 
-// Content-Type 체크: HTML이면 프론트엔드로 판단
+// Content-Type check: HTML responses are treated as web app frontends
 function checkContentType(port) {
   return new Promise((resolve) => {
     const req = http.get({ hostname: "127.0.0.1", port, path: "/", timeout: 2000 }, (res) => {
       const ct = (res.headers["content-type"] || "").toLowerCase();
-      res.resume(); // 응답 body 소비 (메모리 누수 방지)
+      res.resume(); // consume response body to prevent memory leak
       resolve(ct.includes("text/html") ? "html" : ct || "unknown");
     });
     req.on("error", () => resolve("error"));
@@ -206,7 +205,7 @@ function checkContentType(port) {
   });
 }
 
-// 포트 감지됐지만 아직 리스닝 확인 안 된 포트 (워커별)
+// Ports detected in output but not yet confirmed as listening (per worker)
 const pendingPorts = new Map(); // id → Set<port>
 
 function detectPorts(id, output) {
@@ -219,7 +218,7 @@ function detectPorts(id, output) {
   const portSet = detectedPorts.get(id);
   const pending = pendingPorts.get(id);
 
-  // 새로 감지된 포트를 pending에 추가
+  // Add newly detected ports to the pending set
   for (const m of matches) {
     const port = parseInt(m[1], 10);
     if (port < 1024 || port > 65535) continue;
@@ -229,7 +228,7 @@ function detectPorts(id, output) {
     pending.add(port);
   }
 
-  // pending 포트들의 리스닝 여부 확인
+  // Check whether each pending port is actually listening
   for (const port of [...pending]) {
     pending.delete(port);
     checkPortListening(port).then((listening) => {
@@ -240,12 +239,12 @@ function detectPorts(id, output) {
       if (portSet.has(port)) return;
       portSet.add(port);
 
-      // 다른 워커에서 이미 감지·브로드캐스트된 포트면 중복 전송하지 않음
+      // Skip if another worker already detected and broadcast this port
       for (const [wid, pset] of detectedPorts) {
         if (wid !== id && pset.has(port)) return;
       }
 
-      // Content-Type 체크: HTML이면 자동 미리보기, 아니면 사용자 선택
+      // Auto-preview HTML ports; prompt the user for non-HTML ports
       checkContentType(port).then((ct) => {
         if (ct === "html") {
           broadcast({ type: "preview_detected", workerId: id, port });
@@ -456,6 +455,12 @@ function pollOutput(id) {
 
   if (inspect.detection?.matched) {
     sessionStateManager.updateMatch(w, inspect.detection);
+    // Extract usage-limit reset time when a token/usage/rate-limit pattern fires
+    const LIMIT_PATTERNS = new Set(["token_limit", "usage_limit", "rate_limited"]);
+    if (LIMIT_PATTERNS.has(inspect.detection.patternName)) {
+      const resetTime = extractResetTime(inspect.detection.excerpt);
+      if (resetTime) w.tokenResetAt = resetTime;
+    }
   }
 
   const nextState = inspect.nextState || "running";
@@ -751,18 +756,18 @@ const server = http.createServer(async (req, res) => {
     const w = workers.get(workerId);
     if (!w) return json(res, 404, { error: 'worker not found' });
 
-    // path traversal 방지
+    // Prevent path traversal
     if (file && file.includes('..')) return json(res, 400, { error: 'invalid file path' });
 
     const cwd = w.cwd;
 
     const execOpts = { encoding: 'utf8', maxBuffer: 10 * 1024 * 1024, stdio: 'pipe' };
     try {
-      // git repo 확인
+      // Verify this is a git repository
       execFileSync('git', ['-C', cwd, 'rev-parse', '--is-inside-work-tree'], execOpts);
 
       if (file) {
-        // 특정 파일의 diff — HEAD가 있으면 HEAD 대비, 없으면 워킹트리
+        // Per-file diff — against HEAD when available, otherwise against the working tree
         let diff = '';
         try {
           diff = execFileSync('git', ['-C', cwd, '--no-color', 'diff', 'HEAD', '--', file], execOpts);
@@ -771,12 +776,12 @@ const server = http.createServer(async (req, res) => {
         }
         return json(res, 200, { diff });
       } else {
-        // 파일 목록: git status --porcelain (untracked 포함)
+        // File list: git status --porcelain (includes untracked files)
         const status = execFileSync('git', ['-C', cwd, 'status', '--porcelain'], execOpts);
         const files = status.trim().split('\n').filter(Boolean).map(line => {
           const xy = line.substring(0, 2).trim();
           const filePath = line.substring(3);
-          // 상태 매핑: M=수정, A=추가, D=삭제, ?=untracked(신규), R=이름변경
+          // Status mapping: M=modified, A=added, D=deleted, ?=untracked (new), R=renamed
           let s = 'M';
           if (xy === '??') s = 'A';
           else if (xy.includes('D')) s = 'D';
@@ -837,7 +842,7 @@ wss.on('connection', ws => {
   });
   ws.on('close', () => clientSizes.delete(ws));
 
-  // 새 클라이언트에게 기존 미리보기 상태 동기화 (리스닝 중인 포트만, 포트 기준 중복 제거)
+  // Sync existing preview state to newly connected clients (listening ports only, deduplicated by port)
   if (ws.readyState === 1) {
     const syncedPorts = new Set();
     detectedPorts.forEach((portSet, workerId) => {
@@ -853,7 +858,7 @@ wss.on('connection', ws => {
         });
       });
     });
-    // 이미 생성된 터널 URL 전송
+    // Send any already-created tunnel URLs
     previewTunnels.forEach((tunnel, port) => {
       if (tunnel.url) {
         ws.send(JSON.stringify({ type: "preview_tunnel", port, url: tunnel.url }));
@@ -966,7 +971,7 @@ function startTunnel() {
 }
 
 function startPreviewTunnel(port) {
-  // 이미 해당 포트의 터널이 존재하면 중복 생성 방지
+  // Avoid spawning a duplicate tunnel for this port
   if (previewTunnels.has(port)) return;
 
   try {
@@ -981,7 +986,7 @@ function startPreviewTunnel(port) {
     stdio: ["ignore", "pipe", "pipe"],
   });
 
-  // 터널 생성 즉시 Map에 등록 (중복 스폰 방지)
+  // Register in the Map immediately to prevent duplicate spawns
   previewTunnels.set(port, { process: proc, url: null });
 
   const handleData = (data) => {
@@ -1011,7 +1016,7 @@ function cleanupPreviewPorts(workerId) {
   if (!portSet) return;
 
   for (const port of portSet) {
-    // 해당 포트를 다른 워커가 사용 중인지 확인
+    // Check whether another worker is still using this port
     let usedByOther = false;
     for (const [wid, pset] of detectedPorts) {
       if (wid !== workerId && pset.has(port)) {

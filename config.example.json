@@ -24,6 +24,8 @@
       { "name": "confirm", "regex": "confirm\\?" },
       { "name": "retry", "regex": "retry\\?" },
       { "name": "token_limit", "regex": "token limit reached" },
+      { "name": "usage_limit", "regex": "usage limit(?:\\s+(?:reached|exceeded|hit|has been reached))" },
+      { "name": "rate_limited", "regex": "(?:you(?:'re| are) (?:rate.limited|out of (?:free )?uses)|daily limit(?:\\s+(?:hit|reached|exceeded)))" },
       { "name": "auth_required", "regex": "authentication required" }
     ]
   }

@@ -66,6 +66,7 @@ function ensureCard(id, cwd, status, logs, cmd, reason, monitorMeta) {
       '<span id="meta-activity-' + id + '">Activity: -</span>' +
       '<span id="meta-pattern-' + id + '">Prompt: -</span>' +
       '<span id="meta-notify-' + id + '">Notify: -</span>' +
+      '<span id="meta-reset-' + id + '" style="display:none">Reset: -</span>' +
     '</div>' +
     '<div class="logs" id="logs-' + id + '"></div>' +
     '<div class="input-row" id="input-row-' + id + '"' + (status === 'stopped' || status === 'completed' ? ' style="display:none"' : '') + '>' +
@@ -156,8 +157,8 @@ function bindCard(id, root) {
   if (killBtn) killBtn.addEventListener('click', () => killWorker(id));
   if (sendBtn) sendBtn.addEventListener('click', () => sendInput(id));
   if (inp) {
-    // IME 조합 중 Enter 누르면 마지막 글자가 중복되는 크롬 버그 회피:
-    // 조합 중일 때는 Enter를 IME 확정용으로 흘려보내고, compositionend에서 전송
+    // Workaround for Chrome IME bug: pressing Enter during CJK composition duplicates the last character.
+    // While composing, pass Enter through to the IME; send the input only on compositionend.
     let pendingEnter = false;
     inp.addEventListener('compositionend', () => {
       if (pendingEnter) {
@@ -220,26 +221,10 @@ function appendLog(id, src, text) {
     var wasAtBottom = isNearBottom(box);
     const line = document.createElement('div');
     line.className = 'log-line ' + src;
-    line.textContent = text;
+    line.innerHTML = (typeof ansiToHtml === 'function') ? ansiToHtml(text) : text;
     box.appendChild(line);
     if (wasAtBottom) box.scrollTop = box.scrollHeight;
   });
-}
-
-function markPrompt(line, text) {
-  const trimmed = text.trim();
-  if (!/^[❯>›]/.test(trimmed)) { line.textContent = text; return; }
-  const idx = text.indexOf(trimmed[0]);
-  const before = text.slice(0, idx);
-  const symbol = trimmed[0];
-  const after = text.slice(idx + symbol.length);
-  const mark = document.createElement('span');
-  mark.className = 'prompt-mark';
-  mark.textContent = symbol;
-  line.textContent = '';
-  if (before) line.appendChild(document.createTextNode(before));
-  line.appendChild(mark);
-  line.appendChild(document.createTextNode(after));
 }
 
 function updateExitReason(id, reason) {
@@ -353,6 +338,15 @@ function updateMonitorMeta(id, meta) {
   });
   document.querySelectorAll('#meta-notify-' + id).forEach(el => {
     el.textContent = 'Notify: ' + status + (notifyAt !== '-' ? ' @ ' + notifyAt : '');
+  });
+  document.querySelectorAll('#meta-reset-' + id).forEach(el => {
+    if (meta.tokenResetAt) {
+      el.textContent = '⏱ Reset in: ' + meta.tokenResetAt;
+      el.style.display = '';
+      el.style.color = '#d29922';
+    } else {
+      el.style.display = 'none';
+    }
   });
 }
 

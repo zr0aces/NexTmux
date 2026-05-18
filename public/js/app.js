@@ -96,7 +96,7 @@ document.addEventListener('keydown', e => {
     e.preventDefault();
     sendSpecialKey(activeTab, 'Down');
   } else if (!inInput && !e.ctrlKey && !e.metaKey && !e.altKey) {
-    // 입력 필드 밖에서 일반 키 입력 시 터미널로 직접 전달
+    // Forward regular key presses typed outside any input field directly to the active terminal
     if (e.key === 'Backspace') {
       e.preventDefault();
       sendSpecialKey(activeTab, 'BSpace');
