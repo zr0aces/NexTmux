@@ -1,6 +1,6 @@
 services:
   tmuxhub:
-    image: node:20-bookworm
+    image: node:22-bookworm
     working_dir: /app
     env_file:
       - .env

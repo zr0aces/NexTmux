@@ -33,7 +33,7 @@ Contributions and bug reports are very welcome.
 
 ## Prerequisites
 
-- [Node.js](https://nodejs.org) 20+
+- [Node.js](https://nodejs.org) 22+
 - [tmux](https://github.com/tmux/tmux)
 - Optional for remote access:
   - [cloudflared](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/)

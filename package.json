@@ -3,6 +3,9 @@
     "dotenv": "^17.4.2",
     "ws": "^8.20.1"
   },
+  "engines": {
+    "node": ">=22"
+  },
   "name": "tmuxhub",
   "version": "2026.5.5",
   "main": "index.js",
