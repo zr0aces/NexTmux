@@ -1,6 +1,7 @@
 require("dotenv").config();
 const http = require("http");
 const net = require("net");
+const crypto = require("crypto");
 const { execSync, execFileSync, spawn } = require("child_process");
 const fs = require("fs");
 const path = require("path");
@@ -45,9 +46,58 @@ const ACTION_WINDOW_MS = 7000;
 const SHELL_COMMANDS = new Set(["bash", "zsh", "sh", "fish"]);
 const issueAlertTime = new Map(); // key: alert key, value: timestamp
 const ISSUE_ALERT_COOLDOWN_MS = 120000; // 120s cooldown per issue key
+const LOGIN_WINDOW_MS = 10 * 60 * 1000;
+const MAX_LOGIN_ATTEMPTS = 20;
+const loginAttempts = new Map();
 
 function createToken() {
-  return Math.random().toString(36).slice(2) + Date.now().toString(36);
+  return crypto.randomBytes(32).toString("hex");
+}
+
+function getClientIp(req) {
+  const forwarded = req.headers["x-forwarded-for"];
+  if (typeof forwarded === "string" && forwarded.trim()) return forwarded.split(",")[0].trim();
+  return req.socket?.remoteAddress || "unknown";
+}
+
+function trimLoginAttempts(now = Date.now()) {
+  for (const [ip, state] of loginAttempts) {
+    if (!state || now > state.resetAt) loginAttempts.delete(ip);
+  }
+}
+
+function isLoginRateLimited(req) {
+  const now = Date.now();
+  trimLoginAttempts(now);
+  const ip = getClientIp(req);
+  const state = loginAttempts.get(ip);
+  if (!state) return false;
+  if (now > state.resetAt) {
+    loginAttempts.delete(ip);
+    return false;
+  }
+  return state.count >= MAX_LOGIN_ATTEMPTS;
+}
+
+function recordFailedLogin(req) {
+  const now = Date.now();
+  const ip = getClientIp(req);
+  const state = loginAttempts.get(ip);
+  if (!state || now > state.resetAt) {
+    loginAttempts.set(ip, { count: 1, resetAt: now + LOGIN_WINDOW_MS });
+    return;
+  }
+  state.count += 1;
+}
+
+function clearFailedLogin(req) {
+  loginAttempts.delete(getClientIp(req));
+}
+
+function buildAuthCookie(req, token) {
+  const isSecure = req.socket?.encrypted || req.headers["x-forwarded-proto"] === "https";
+  const secure = isSecure ? "; Secure" : "";
+  return `token=${token}; Path=/; HttpOnly; SameSite=Strict${secure}`;
 }
 
 function sanitizeSessionName(name) {
@@ -572,14 +622,17 @@ const server = http.createServer(async (req, res) => {
   }
 
   if (method === "POST" && url === "/api/login") {
+    if (isLoginRateLimited(req)) return json(res, 429, { ok: false, error: "too_many_attempts" });
     const { ok, body } = await parseBody(req);
     if (!ok || !body) return json(res, 400, { error: "invalid request body" });
     if (body.pw === PASSWORD) {
       const token = createToken();
       sessions.set(token, true);
-      res.writeHead(200, { "Set-Cookie": `token=${token}; Path=/; HttpOnly`, "Content-Type": "application/json" });
+      clearFailedLogin(req);
+      res.writeHead(200, { "Set-Cookie": buildAuthCookie(req, token), "Content-Type": "application/json" });
       return res.end(JSON.stringify({ ok: true }));
     }
+    recordFailedLogin(req);
     return json(res, 401, { ok: false });
   }
 
@@ -819,7 +872,11 @@ const server = http.createServer(async (req, res) => {
 
 wss = new WebSocketServer({ server });
 const clientSizes = new Map();
-wss.on('connection', ws => {
+wss.on('connection', (ws, req) => {
+  if (!auth(req)) {
+    ws.close(1008, "unauthorized");
+    return;
+  }
   ws.on('message', raw => {
     try {
       const msg = JSON.parse(raw);

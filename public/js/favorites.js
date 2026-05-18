@@ -1,7 +1,16 @@
 // ── Favorites & Path Management ──
 
-let favorites = JSON.parse(localStorage.getItem('fav') || 'null') || [];
-let recents = JSON.parse(localStorage.getItem('recent') || '[]');
+function readJsonArray(key) {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(key) || '[]');
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+let favorites = readJsonArray('fav');
+let recents = readJsonArray('recent');
 
 function displayPath(p) {
   const base = window._basePath || '';
@@ -57,18 +66,61 @@ function renderDropdown() {
   const fl = document.getElementById('fav-list');
   const rl = document.getElementById('recent-list');
   if (!fl) return;
+  fl.textContent = '';
+  rl.textContent = '';
 
-  fl.innerHTML = favorites.length
-    ? favorites.map(p =>
-        '<div class="dir-item"><span>⭐</span>' +
-        '<span onclick="selectPath(\'' + p + '\')" style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + displayPath(p) + '</span>' +
-        '<span class="del" onclick="removeFavorite(\'' + p + '\')">✕</span></div>'
-      ).join('')
-    : '<div style="padding:8px 10px;font-size:12px;color:#8b949e">None</div>';
+  if (!favorites.length) {
+    const empty = document.createElement('div');
+    empty.style.cssText = 'padding:8px 10px;font-size:12px;color:#8b949e';
+    empty.textContent = 'None';
+    fl.appendChild(empty);
+  } else {
+    favorites.forEach(p => {
+      const item = document.createElement('div');
+      item.className = 'dir-item';
 
-  rl.innerHTML = recents.length
-    ? recents.map(p =>
-        '<div class="dir-item" onclick="selectPath(\'' + p + '\')"><span>🕐</span><span>' + displayPath(p) + '</span></div>'
-      ).join('')
-    : '<div style="padding:8px 10px;font-size:12px;color:#8b949e">None</div>';
+      const icon = document.createElement('span');
+      icon.textContent = '⭐';
+
+      const path = document.createElement('span');
+      path.style.cssText = 'flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap';
+      path.textContent = displayPath(p);
+      path.addEventListener('click', () => selectPath(p));
+
+      const del = document.createElement('span');
+      del.className = 'del';
+      del.textContent = '✕';
+      del.addEventListener('click', e => {
+        e.stopPropagation();
+        removeFavorite(p);
+      });
+
+      item.appendChild(icon);
+      item.appendChild(path);
+      item.appendChild(del);
+      fl.appendChild(item);
+    });
+  }
+
+  if (!recents.length) {
+    const empty = document.createElement('div');
+    empty.style.cssText = 'padding:8px 10px;font-size:12px;color:#8b949e';
+    empty.textContent = 'None';
+    rl.appendChild(empty);
+  } else {
+    recents.forEach(p => {
+      const item = document.createElement('div');
+      item.className = 'dir-item';
+      item.addEventListener('click', () => selectPath(p));
+
+      const icon = document.createElement('span');
+      icon.textContent = '🕐';
+      const path = document.createElement('span');
+      path.textContent = displayPath(p);
+
+      item.appendChild(icon);
+      item.appendChild(path);
+      rl.appendChild(item);
+    });
+  }
 }

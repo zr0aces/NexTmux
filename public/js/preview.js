@@ -356,20 +356,25 @@ function showPreviewPrompt(workerId, port, contentType) {
   var toast = document.createElement('div');
   toast.className = 'preview-prompt';
   toast.id = 'preview-prompt-' + tabId;
+  const text = document.createElement('span');
+  text.className = 'preview-prompt-text';
+  text.textContent = `Port :${port} detected (${contentType || 'unknown'})`;
+  const openBtn = document.createElement('button');
+  openBtn.className = 'preview-prompt-btn preview-prompt-open';
+  openBtn.textContent = 'Preview';
+  const dismissBtn = document.createElement('button');
+  dismissBtn.className = 'preview-prompt-btn preview-prompt-dismiss';
+  dismissBtn.textContent = 'Dismiss';
+  toast.appendChild(text);
+  toast.appendChild(openBtn);
+  toast.appendChild(dismissBtn);
 
-  toast.innerHTML =
-    '<span class="preview-prompt-text">' +
-      'Port <b>:' + port + '</b> detected (' + (contentType || 'unknown') + ')' +
-    '</span>' +
-    '<button class="preview-prompt-btn preview-prompt-open">Preview</button>' +
-    '<button class="preview-prompt-btn preview-prompt-dismiss">Dismiss</button>';
-
-  toast.querySelector('.preview-prompt-open').addEventListener('click', function() {
+  openBtn.addEventListener('click', function() {
     toast.remove();
     ensurePreview(workerId, port);
   });
 
-  toast.querySelector('.preview-prompt-dismiss').addEventListener('click', function() {
+  dismissBtn.addEventListener('click', function() {
     toast.remove();
   });
 

@@ -21,6 +21,15 @@ function trimTitle(text) {
   return text.slice(0, max - 1) + '…';
 }
 
+function escapeHtml(text) {
+  return String(text)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 function renderTitle(id, cwd, cmd) {
   const tab = document.querySelector('.tab[data-id="' + id + '"]');
   const tabCwd = cwd || (tab && tab.dataset.cwd) || '';
@@ -50,17 +59,18 @@ function ensureCard(id, cwd, status, logs, cmd, reason, monitorMeta) {
   if (document.getElementById('card-' + id)) return;
 
   const cmdLabel = cmd || 'claude';
+  const folderLabel = cwd.replace(/\/$/, '').split('/').pop() || cwd;
   const card = document.createElement('div');
   card.className = 'card';
   card.id = 'card-' + id;
   card.innerHTML =
     '<div class="card-header">' +
-      '<span class="card-title" id="card-title-' + id + '">#' + id + ' ' + cmdLabel + ' · ' + (cwd.replace(/\/$/, '').split('/').pop() || cwd) + '</span>' +
+      '<span class="card-title" id="card-title-' + id + '">#' + id + ' ' + escapeHtml(cmdLabel) + ' · ' + escapeHtml(folderLabel) + '</span>' +
       '<span class="badge' + (status === 'stopped' ? ' stopped' : '') + (status === 'completed' ? ' completed' : '') + '" id="badge-' + id + '">' + status + '</span>' +
       '<button class="diff-btn" id="diff-' + id + '" title="Git Diff">Diff</button>' +
       killBtnHtml(id, status) +
     '</div>' +
-    '<div class="card-cwd">' + displayPath(cwd) + '</div>' +
+    '<div class="card-cwd">' + escapeHtml(displayPath(cwd)) + '</div>' +
     '<div class="exit-reason" id="exit-reason-' + id + '"></div>' +
     '<div class="monitor-meta" id="meta-' + id + '">' +
       '<span id="meta-activity-' + id + '">Activity: -</span>' +
@@ -105,7 +115,7 @@ function ensureCard(id, cwd, status, logs, cmd, reason, monitorMeta) {
   tab.dataset.cwd = cwd;
   tab.dataset.cmd = cmdLabel;
   var folder = cwd.replace(/\/$/, '').split('/').pop() || cwd;
-  tab.innerHTML = '<span class="tab-dot' + (status === 'stopped' ? ' stopped' : '') + (status === 'completed' ? ' completed' : '') + '" id="tab-dot-' + id + '"></span><span class="tab-label" id="tab-label-' + id + '">#' + id + ' ' + (cmd || 'claude') + ' · ' + folder + '</span>';
+  tab.innerHTML = '<span class="tab-dot' + (status === 'stopped' ? ' stopped' : '') + (status === 'completed' ? ' completed' : '') + '" id="tab-dot-' + id + '"></span><span class="tab-label" id="tab-label-' + id + '">#' + id + ' ' + escapeHtml(cmd || 'claude') + ' · ' + escapeHtml(folder) + '</span>';
   tab.addEventListener('click', () => selectTab(id));
   tab.addEventListener('dblclick', e => {
     e.stopPropagation();

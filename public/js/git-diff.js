@@ -4,6 +4,14 @@
 // workerId → { open: boolean, selectedFile: string|null }
 const diffPanels = new Map();
 
+function setDiffMessage(target, message, color) {
+  target.textContent = '';
+  const box = document.createElement('div');
+  box.style.cssText = 'padding:8px;font-size:11px;' + (color ? ('color:' + color) : 'color:#484f58');
+  box.textContent = message;
+  target.appendChild(box);
+}
+
 function openGitDiff(workerId) {
   workerId = String(workerId);
 
@@ -99,14 +107,14 @@ function loadFileList(workerId) {
     })
     .then(function(data) {
       if (data.error) {
-        fileList.innerHTML = '<div style="padding:8px;font-size:11px;color:#f85149">' + data.error + '</div>';
+        setDiffMessage(fileList, data.error, '#f85149');
         return;
       }
 
       statEl.textContent = data.stat || '';
 
       if (!data.files || data.files.length === 0) {
-        fileList.innerHTML = '<div style="padding:8px;font-size:11px;color:#484f58">No changes</div>';
+        setDiffMessage(fileList, 'No changes');
         return;
       }
 
@@ -119,9 +127,11 @@ function loadFileList(workerId) {
         var trimmed = f.path.replace(/\/+$/, '');
         var filename = trimmed.split('/').pop() || f.path;
         item.title = f.path;
-        item.innerHTML =
-          '<span class="diff-file-status ' + f.status + '">' + f.status + '</span> ' +
-          filename;
+        var status = document.createElement('span');
+        status.className = 'diff-file-status ' + f.status;
+        status.textContent = f.status;
+        item.appendChild(status);
+        item.appendChild(document.createTextNode(' ' + filename));
 
         item.addEventListener('click', function() {
           loadFileDiff(workerId, f.path);
@@ -131,7 +141,7 @@ function loadFileList(workerId) {
       });
     })
     .catch(function(err) {
-      fileList.innerHTML = '<div style="padding:8px;font-size:11px;color:#f85149">Load failed: ' + err.message + '</div>';
+      setDiffMessage(fileList, 'Load failed: ' + err.message, '#f85149');
     });
 }
 
@@ -180,7 +190,12 @@ function loadFileDiff(workerId, filePath) {
       ui.highlightCode();
     })
     .catch(function(err) {
-      diffContent.innerHTML = '<div class="diff-placeholder" style="color:#f85149">Load failed: ' + err.message + '</div>';
+      diffContent.innerHTML = '';
+      const box = document.createElement('div');
+      box.className = 'diff-placeholder';
+      box.style.color = '#f85149';
+      box.textContent = 'Load failed: ' + err.message;
+      diffContent.appendChild(box);
     });
 }
 
