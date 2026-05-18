@@ -20,6 +20,8 @@ const ENABLE_PREVIEW = process.env.ENABLE_PREVIEW === "1";
 const PREVIEW_TUNNEL = process.env.PREVIEW_TUNNEL === "1";
 const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const TELEGRAM_CHAT_ID = process.env.TELEGRAM_CHAT_ID;
+// ENABLE_TUNNEL: env takes precedence; config fallback resolved after loadConfig()
+// Resolved into TUNNEL_ENABLED below, after appConfig is loaded.
 
 // workerId(문자열) → Set<number> : 워커별 감지된 포트 목록
 const detectedPorts = new Map();
@@ -90,6 +92,16 @@ function buildMonitorConfig(config) {
 }
 
 const appConfig = loadConfig();
+
+// Resolve tunnel toggle: ENABLE_TUNNEL env takes precedence; fallback to config.tunnel.enabled;
+// default true to preserve backward compatibility for users who already have cloudflared.
+let TUNNEL_ENABLED;
+if (process.env.ENABLE_TUNNEL !== undefined && process.env.ENABLE_TUNNEL !== "") {
+  TUNNEL_ENABLED = process.env.ENABLE_TUNNEL !== "0";
+} else {
+  TUNNEL_ENABLED = appConfig.tunnel?.enabled !== false;
+}
+
 const monitorConfig = buildMonitorConfig(appConfig);
 const patternEngine = createPatternEngine({
   patterns: monitorConfig.patterns,
@@ -265,8 +277,7 @@ function broadcastMonitorMeta(id) {
 }
 
 function spawnWorker(cwd, cmd) {
-  const config = loadConfig();
-  cmd = cmd || config.defaultCommand || "claude";
+  cmd = cmd || appConfig.defaultCommand || "claude";
   const id = String(nextId++);
   const sessionName = "term-" + id;
   tmux(`new-session -d -s ${sessionName} -c "${cwd}" -e CLAUDECODE=`);
@@ -498,6 +509,14 @@ function readBody(req) {
   });
 }
 
+async function parseBody(req) {
+  try {
+    return { ok: true, body: JSON.parse(await readBody(req)) };
+  } catch {
+    return { ok: false, body: null };
+  }
+}
+
 function json(res, code, obj) {
   res.writeHead(code, { "Content-Type": "application/json" });
   res.end(JSON.stringify(obj));
@@ -519,7 +538,8 @@ const server = http.createServer(async (req, res) => {
   }
 
   if (method === "POST" && url === "/api/login") {
-    const body = JSON.parse(await readBody(req));
+    const { ok, body } = await parseBody(req);
+    if (!ok || !body) return json(res, 400, { error: "invalid request body" });
     if (body.pw === PASSWORD) {
       const token = createToken();
       sessions.set(token, true);
@@ -584,7 +604,9 @@ const server = http.createServer(async (req, res) => {
   }
 
   if (method === "POST" && url === "/api/attach") {
-    const { sessionName, cwd } = JSON.parse(await readBody(req));
+    const { ok, body } = await parseBody(req);
+    if (!ok || !body) return json(res, 400, { error: "invalid request body" });
+    const { sessionName, cwd } = body;
     const id = String(nextId++);
     workers.set(id, {
       sessionName,
@@ -604,7 +626,8 @@ const server = http.createServer(async (req, res) => {
   }
 
   if (method === "POST" && url === "/api/spawn") {
-    const body = JSON.parse(await readBody(req));
+    const { ok, body } = await parseBody(req);
+    if (!ok || !body) return json(res, 400, { error: "invalid request body" });
     const rawCwd = body.cwd || process.cwd();
     const resolvedCwd = path.resolve(rawCwd);
     try {
@@ -620,13 +643,17 @@ const server = http.createServer(async (req, res) => {
   }
 
   if (method === "POST" && url === "/api/input") {
-    const { id, text } = JSON.parse(await readBody(req));
+    const { ok, body } = await parseBody(req);
+    if (!ok || !body) return json(res, 400, { error: "invalid request body" });
+    const { id, text } = body;
     const ok = sendInput(id, text);
     return json(res, 200, { ok });
   }
 
   if (method === "POST" && url === "/api/remove") {
-    const { id } = JSON.parse(await readBody(req));
+    const { ok, body } = await parseBody(req);
+    if (!ok || !body) return json(res, 400, { error: "invalid request body" });
+    const { id } = body;
     const w = workers.get(id);
     if (w) {
       if (w.pollTimer) clearInterval(w.pollTimer);
@@ -639,7 +666,9 @@ const server = http.createServer(async (req, res) => {
   }
 
   if (method === "POST" && url === "/api/key") {
-    const { id, key } = JSON.parse(await readBody(req));
+    const { ok, body } = await parseBody(req);
+    if (!ok || !body) return json(res, 400, { error: "invalid request body" });
+    const { id, key } = body;
     const w = workers.get(id);
     if (w) {
       if (w.status === "completed") {
@@ -658,7 +687,9 @@ const server = http.createServer(async (req, res) => {
   }
 
   if (method === "POST" && url === "/api/reconnect") {
-    const { id } = JSON.parse(await readBody(req));
+    const { ok, body } = await parseBody(req);
+    if (!ok || !body) return json(res, 400, { error: "invalid request body" });
+    const { id } = body;
     const w = workers.get(id);
     if (!w) return json(res, 404, { ok: false });
     if (isAlive(w.sessionName)) {
@@ -735,7 +766,9 @@ const server = http.createServer(async (req, res) => {
   }
 
   if (method === "POST" && url === "/api/kill") {
-    const { id } = JSON.parse(await readBody(req));
+    const { ok, body } = await parseBody(req);
+    if (!ok || !body) return json(res, 400, { error: "invalid request body" });
+    const { id } = body;
     killWorker(id, "Stopped from dashboard (Stop button).");
     return json(res, 200, { ok: true });
   }
@@ -1002,7 +1035,11 @@ server.listen(PORT, () => {
   console.log(`📺 View tmux session: tmux attach -t term-1`);
   console.log(`👀 AI monitor: ${monitorConfig.enabled ? "enabled" : "disabled"} (poll=${monitorConfig.pollIntervalMs}ms, lines=${monitorConfig.linesToInspect})`);
   console.log(`📨 Telegram alerts: ${telegramService.enabled ? "configured" : "not configured"}`);
-  startTunnel();
+  if (TUNNEL_ENABLED) {
+    startTunnel();
+  } else {
+    console.log("☁️  Tunnel disabled (set ENABLE_TUNNEL=1 or tunnel.enabled=true in config.json to enable)");
+  }
   if (ENABLE_TUNNEL_HEALTHCHECK) {
     setInterval(checkTunnel, 60000);
   } else {

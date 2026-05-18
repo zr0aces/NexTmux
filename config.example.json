@@ -5,6 +5,9 @@
     "/Users/yourname/Desktop/my-project-2"
   ],
   "defaultCommand": "claude",
+  "tunnel": {
+    "enabled": true
+  },
   "aiMonitor": {
     "enabled": true,
     "pollIntervalMs": 1000,
