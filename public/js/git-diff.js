@@ -1,8 +1,16 @@
 // ── Git Diff Panel Module ──
-// 워커 탭 내 좌우 분할로 git diff 결과를 diff2html로 렌더링한다.
+// Renders git diff output via diff2html in a side-by-side split panel inside a worker tab.
 
 // workerId → { open: boolean, selectedFile: string|null }
 const diffPanels = new Map();
+
+function setDiffMessage(target, message, color) {
+  target.textContent = '';
+  const box = document.createElement('div');
+  box.style.cssText = 'padding:8px;font-size:11px;' + (color ? ('color:' + color) : 'color:#484f58');
+  box.textContent = message;
+  target.appendChild(box);
+}
 
 function openGitDiff(workerId) {
   workerId = String(workerId);
@@ -10,33 +18,33 @@ function openGitDiff(workerId) {
   const workerPanel = document.querySelector('.tab-panel[data-id="' + workerId + '"]');
   if (!workerPanel) return;
 
-  // 이미 diff 패널이 열려 있으면 토글 (닫기)
+  // If a diff panel is already open for this worker, toggle it closed
   if (workerPanel.querySelector('.split-diff')) {
     closeGitDiff(workerId);
     return;
   }
 
-  // preview가 열려 있으면 먼저 닫기 (한 번에 하나만)
+  // If a preview split is open, close it first (only one side panel at a time)
   const existingPreview = workerPanel.querySelector('.split-preview');
   if (existingPreview) {
     const previewId = existingPreview.dataset.previewId;
     if (previewId) closeSplitPreview(workerId, previewId);
   }
 
-  // 리사이즈 핸들
+  // Resize handle
   const handle = document.createElement('div');
   handle.className = 'split-resize-handle';
 
-  // diff 패널 컨테이너
+  // Diff panel container
   const container = document.createElement('div');
   container.className = 'split-diff';
   container.dataset.workerId = workerId;
 
   container.innerHTML =
     '<div class="diff-toolbar">' +
-      '<button class="diff-refresh-btn" title="새로고침">↺</button>' +
+      '<button class="diff-refresh-btn" title="Refresh">↺</button>' +
       '<span class="diff-stat"></span>' +
-      '<button class="diff-close-btn" title="닫기">✕</button>' +
+      '<button class="diff-close-btn" title="Close">✕</button>' +
     '</div>' +
     '<div class="diff-body">' +
       '<div class="diff-file-sidebar">' +
@@ -44,11 +52,11 @@ function openGitDiff(workerId) {
       '</div>' +
       '<div class="diff-sidebar-toggle">◀</div>' +
       '<div class="diff-content">' +
-        '<div class="diff-placeholder">파일을 선택하세요</div>' +
+        '<div class="diff-placeholder">Select a file to view diff</div>' +
       '</div>' +
     '</div>';
 
-  // 버튼 이벤트 바인딩
+  // Button event bindings
   container.querySelector('.diff-close-btn').addEventListener('click', function() {
     closeGitDiff(workerId);
   });
@@ -57,7 +65,7 @@ function openGitDiff(workerId) {
     refreshGitDiff(workerId);
   });
 
-  // 사이드바 토글
+  // Sidebar toggle
   var sidebar = container.querySelector('.diff-file-sidebar');
   var toggleBtn = container.querySelector('.diff-sidebar-toggle');
   toggleBtn.addEventListener('click', function() {
@@ -69,14 +77,14 @@ function openGitDiff(workerId) {
   workerPanel.appendChild(handle);
   workerPanel.appendChild(container);
 
-  // 드래그 리사이즈
+  // Drag-to-resize
   if (typeof initSplitResize === 'function') {
     initSplitResize(handle, workerPanel);
   }
 
   diffPanels.set(workerId, { open: true, selectedFile: null });
 
-  // 파일 목록 자동 로드
+  // Auto-load file list
   loadFileList(workerId);
 
   setTimeout(sendResize, 100);
@@ -90,7 +98,7 @@ function loadFileList(workerId) {
   var fileList = container.querySelector('.diff-file-list');
   var statEl = container.querySelector('.diff-stat');
 
-  fileList.innerHTML = '<div style="padding:8px;font-size:11px;color:#484f58">로딩 중...</div>';
+  fileList.innerHTML = '<div style="padding:8px;font-size:11px;color:#484f58">Loading…</div>';
 
   fetch('/api/git-diff?id=' + encodeURIComponent(workerId), { credentials: 'include' })
     .then(function(r) {
@@ -99,14 +107,14 @@ function loadFileList(workerId) {
     })
     .then(function(data) {
       if (data.error) {
-        fileList.innerHTML = '<div style="padding:8px;font-size:11px;color:#f85149">' + data.error + '</div>';
+        setDiffMessage(fileList, data.error, '#f85149');
         return;
       }
 
       statEl.textContent = data.stat || '';
 
       if (!data.files || data.files.length === 0) {
-        fileList.innerHTML = '<div style="padding:8px;font-size:11px;color:#484f58">변경 사항 없음</div>';
+        setDiffMessage(fileList, 'No changes');
         return;
       }
 
@@ -119,9 +127,11 @@ function loadFileList(workerId) {
         var trimmed = f.path.replace(/\/+$/, '');
         var filename = trimmed.split('/').pop() || f.path;
         item.title = f.path;
-        item.innerHTML =
-          '<span class="diff-file-status ' + f.status + '">' + f.status + '</span> ' +
-          filename;
+        var status = document.createElement('span');
+        status.className = 'diff-file-status ' + f.status;
+        status.textContent = f.status;
+        item.appendChild(status);
+        item.appendChild(document.createTextNode(' ' + filename));
 
         item.addEventListener('click', function() {
           loadFileDiff(workerId, f.path);
@@ -131,7 +141,7 @@ function loadFileList(workerId) {
       });
     })
     .catch(function(err) {
-      fileList.innerHTML = '<div style="padding:8px;font-size:11px;color:#f85149">로드 실패: ' + err.message + '</div>';
+      setDiffMessage(fileList, 'Load failed: ' + err.message, '#f85149');
     });
 }
 
@@ -142,7 +152,7 @@ function loadFileDiff(workerId, filePath) {
 
   var diffContent = container.querySelector('.diff-content');
 
-  // 선택 상태 표시
+  // Highlight selected file
   container.querySelectorAll('.diff-file-item').forEach(function(item) {
     item.classList.toggle('active', item.dataset.path === filePath);
   });
@@ -150,7 +160,7 @@ function loadFileDiff(workerId, filePath) {
   var state = diffPanels.get(workerId);
   if (state) state.selectedFile = filePath;
 
-  diffContent.innerHTML = '<div class="diff-placeholder">로딩 중...</div>';
+  diffContent.innerHTML = '<div class="diff-placeholder">Loading…</div>';
 
   fetch('/api/git-diff?id=' + encodeURIComponent(workerId) + '&file=' + encodeURIComponent(filePath), { credentials: 'include' })
     .then(function(r) {
@@ -161,12 +171,12 @@ function loadFileDiff(workerId, filePath) {
       diffContent.innerHTML = '';
 
       if (!data.diff) {
-        diffContent.innerHTML = '<div class="diff-placeholder">변경 사항 없음</div>';
+        diffContent.innerHTML = '<div class="diff-placeholder">No changes</div>';
         return;
       }
 
       if (typeof Diff2HtmlUI === 'undefined') {
-        diffContent.innerHTML = '<div class="diff-placeholder" style="color:#f85149">diff2html 라이브러리 로드 실패</div>';
+        diffContent.innerHTML = '<div class="diff-placeholder" style="color:#f85149">diff2html library failed to load</div>';
         return;
       }
       var ui = new Diff2HtmlUI(diffContent, data.diff, {
@@ -180,7 +190,12 @@ function loadFileDiff(workerId, filePath) {
       ui.highlightCode();
     })
     .catch(function(err) {
-      diffContent.innerHTML = '<div class="diff-placeholder" style="color:#f85149">로드 실패: ' + err.message + '</div>';
+      diffContent.innerHTML = '';
+      const box = document.createElement('div');
+      box.className = 'diff-placeholder';
+      box.style.color = '#f85149';
+      box.textContent = 'Load failed: ' + err.message;
+      diffContent.appendChild(box);
     });
 }
 
@@ -189,7 +204,7 @@ function closeGitDiff(workerId) {
   var container = document.querySelector('.split-diff[data-worker-id="' + workerId + '"]');
 
   if (container) {
-    // 리사이즈 핸들 제거
+    // Also remove the resize handle that precedes the container
     var prev = container.previousElementSibling;
     if (prev && prev.classList.contains('split-resize-handle')) {
       prev.remove();
@@ -199,7 +214,7 @@ function closeGitDiff(workerId) {
 
   var workerPanel = document.querySelector('.tab-panel[data-id="' + workerId + '"]');
   if (workerPanel) {
-    // preview가 없을 때만 has-preview 제거
+    // Only remove the has-preview class if no split-preview is still open
     if (!workerPanel.querySelector('.split-preview')) {
       workerPanel.classList.remove('has-preview');
     }
@@ -219,7 +234,7 @@ function refreshGitDiff(workerId) {
   var selectedFile = state.selectedFile;
   loadFileList(workerId);
   if (selectedFile) {
-    // 파일 목록 로드 후 선택 파일 diff도 갱신
+    // Reload the selected file diff after the file list refreshes
     setTimeout(function() { loadFileDiff(workerId, selectedFile); }, 300);
   }
 }

@@ -334,6 +334,12 @@ header h1 {
   50% { opacity: 0.3; }
 }
 
+/* ANSI blinking text (SGR 5/6) */
+@keyframes ansi-blink {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0; }
+}
+
 /* ── Content Area ──────────────────────────────────── */
 
 #content {
@@ -412,6 +418,24 @@ header h1 {
   padding: 4px 12px;
   border-bottom: 1px solid #21262d;
   background: #2f2400;
+}
+
+.monitor-meta {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  font-size: 10px;
+  color: #8b949e;
+  padding: 4px 12px;
+  border-bottom: 1px solid #21262d;
+  background: #11161c;
+}
+
+.monitor-meta span {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 33%;
 }
 
 .badge {
@@ -629,14 +653,14 @@ header h1 {
 
 /* ── Preview Tab ───────────────────────────────────── */
 
-/* 미리보기 탭 구분: 일반 터미널 탭과 시각적으로 구분 */
+/* ── Preview Tab — visually distinct from terminal tabs */
 .tab[data-preview="true"] .tab-label::before {
   content: "⬡ ";
   font-size: 10px;
   opacity: 0.7;
 }
 
-/* 미리보기 상태 도트 — 파란색 계열로 구분 */
+/* Preview status dot — blue to distinguish from terminal tabs */
 .tab-dot.preview-dot {
   background: #58a6ff;
 }
@@ -653,7 +677,7 @@ header h1 {
   background: #c33;
 }
 
-/* 패널 레이아웃 — iframe이 전체 영역 차지 */
+/* Panel layout — iframe fills the entire area */
 .preview-panel {
   display: none;
   flex-direction: column;
@@ -666,7 +690,7 @@ header h1 {
   display: flex;
 }
 
-/* iframe 상단 툴바 */
+/* Toolbar above the iframe */
 .preview-toolbar {
   display: flex;
   align-items: center;
@@ -706,7 +730,7 @@ header h1 {
   color: #e6edf3;
 }
 
-/* iframe 자체 */
+/* The iframe itself */
 .preview-iframe {
   flex: 1;
   width: 100%;
@@ -715,7 +739,7 @@ header h1 {
   min-height: 0;
 }
 
-/* iframe 로드 실패 폴백 */
+/* Fallback shown when the iframe fails to load */
 .preview-error {
   display: flex;
   flex-direction: column;
@@ -736,21 +760,21 @@ header h1 {
   text-decoration: underline;
 }
 
-/* ── Split Preview (PC 좌우 분할 뷰) ───────────────── */
+/* ── Split Preview (side-by-side terminal + preview) ── */
 
-/* 분할 모드 활성화: tab-panel을 좌우 배치로 전환 */
+/* Split mode active: arrange tab-panel contents left-to-right */
 .tab-panel.has-preview {
   flex-direction: row;
 }
 
-/* 터미널 영역: 왼쪽 */
+/* Terminal area: left side */
 .tab-panel.has-preview > .card {
   flex: none;
   width: 50%;
   min-width: 100px;
 }
 
-/* 리사이즈 핸들: 터미널과 미리보기 사이 드래그 바 */
+/* Resize handle: draggable bar between terminal and preview */
 .split-resize-handle {
   width: 5px;
   cursor: col-resize;
@@ -764,7 +788,7 @@ header h1 {
   background: #58a6ff;
 }
 
-/* 미리보기 영역: 오른쪽 절반 */
+/* Preview area: right side */
 .split-preview {
   flex: 1;
   display: flex;
@@ -773,7 +797,7 @@ header h1 {
   min-width: 100px;
 }
 
-/* split-preview 내 toolbar — 기존 preview-toolbar 스타일 상속 */
+/* split-preview toolbar inherits from .preview-toolbar */
 .split-preview .preview-toolbar {
   display: flex;
   align-items: center;
@@ -784,7 +808,7 @@ header h1 {
   flex-shrink: 0;
 }
 
-/* split-preview 내 iframe */
+/* split-preview iframe */
 .split-preview .preview-iframe {
   flex: 1;
   width: 100%;
@@ -793,7 +817,7 @@ header h1 {
   min-height: 0;
 }
 
-/* 닫기 버튼 — preview-close와 유사 */
+/* Close button — matches preview-close style */
 .split-preview-close {
   margin-left: 4px;
   font-size: 11px;
@@ -977,7 +1001,7 @@ header h1 {
   font-size: 14px;
 }
 
-/* diff2html 다크 테마 오버라이드 */
+/* diff2html dark-theme overrides */
 .d2h-wrapper          { background: #0d1117; }
 .d2h-file-header      { background: #161b22; border-color: #30363d; }
 .d2h-file-wrapper     { border-color: #30363d; }
@@ -1064,6 +1088,35 @@ header h1 {
   cursor: pointer;
 }
 
+.login-remember {
+  width: 240px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: #8b949e;
+  user-select: none;
+}
+
+.login-remember input[type="checkbox"] {
+  width: 14px;
+  height: 14px;
+  accent-color: #1f6feb;
+}
+
+#login .login-secondary-btn {
+  background: #21262d;
+  border: 1px solid #30363d;
+  color: #8b949e;
+  font-size: 13px;
+  padding: 8px 0;
+}
+
+#login .login-secondary-btn:hover {
+  background: #30363d;
+  color: #e6edf3;
+}
+
 #login-err {
   color: #f85149;
   font-size: 13px;
@@ -1128,7 +1181,7 @@ header h1 {
     padding: 2px 6px;
   }
 
-  /* 모바일: 분할 뷰 숨김 — 별도 탭 방식 유지 */
+  /* Mobile: hide split view — tab layout only */
   .split-preview {
     display: none;
   }
@@ -1137,7 +1190,7 @@ header h1 {
     display: none;
   }
 
-  /* 분할 뷰 숨겨도 터미널 카드는 세로 배치 복원 */
+  /* When split view is hidden, restore vertical card stacking */
   .tab-panel.has-preview {
     flex-direction: column;
   }

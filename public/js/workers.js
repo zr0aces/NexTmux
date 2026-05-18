@@ -21,6 +21,15 @@ function trimTitle(text) {
   return text.slice(0, max - 1) + '…';
 }
 
+function escapeHtml(text) {
+  return String(text)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 function renderTitle(id, cwd, cmd) {
   const tab = document.querySelector('.tab[data-id="' + id + '"]');
   const tabCwd = cwd || (tab && tab.dataset.cwd) || '';
@@ -46,22 +55,29 @@ function killBtnHtml(id, status) {
   return '<button class="kill-btn" id="kill-' + id + '">Stop</button>';
 }
 
-function ensureCard(id, cwd, status, logs, cmd, reason) {
+function ensureCard(id, cwd, status, logs, cmd, reason, monitorMeta) {
   if (document.getElementById('card-' + id)) return;
 
   const cmdLabel = cmd || 'claude';
+  const folderLabel = cwd.replace(/\/$/, '').split('/').pop() || cwd;
   const card = document.createElement('div');
   card.className = 'card';
   card.id = 'card-' + id;
   card.innerHTML =
     '<div class="card-header">' +
-      '<span class="card-title" id="card-title-' + id + '">#' + id + ' ' + cmdLabel + ' · ' + (cwd.replace(/\/$/, '').split('/').pop() || cwd) + '</span>' +
+      '<span class="card-title" id="card-title-' + id + '">#' + id + ' ' + escapeHtml(cmdLabel) + ' · ' + escapeHtml(folderLabel) + '</span>' +
       '<span class="badge' + (status === 'stopped' ? ' stopped' : '') + (status === 'completed' ? ' completed' : '') + '" id="badge-' + id + '">' + status + '</span>' +
       '<button class="diff-btn" id="diff-' + id + '" title="Git Diff">Diff</button>' +
       killBtnHtml(id, status) +
     '</div>' +
-    '<div class="card-cwd">' + displayPath(cwd) + '</div>' +
+    '<div class="card-cwd">' + escapeHtml(displayPath(cwd)) + '</div>' +
     '<div class="exit-reason" id="exit-reason-' + id + '"></div>' +
+    '<div class="monitor-meta" id="meta-' + id + '">' +
+      '<span id="meta-activity-' + id + '">Activity: -</span>' +
+      '<span id="meta-pattern-' + id + '">Prompt: -</span>' +
+      '<span id="meta-notify-' + id + '">Notify: -</span>' +
+      '<span id="meta-reset-' + id + '" style="display:none">Reset: -</span>' +
+    '</div>' +
     '<div class="logs" id="logs-' + id + '"></div>' +
     '<div class="input-row" id="input-row-' + id + '"' + (status === 'stopped' || status === 'completed' ? ' style="display:none"' : '') + '>' +
       '<textarea id="inp-' + id + '" placeholder="Enter command..." rows="1"></textarea>' +
@@ -99,7 +115,7 @@ function ensureCard(id, cwd, status, logs, cmd, reason) {
   tab.dataset.cwd = cwd;
   tab.dataset.cmd = cmdLabel;
   var folder = cwd.replace(/\/$/, '').split('/').pop() || cwd;
-  tab.innerHTML = '<span class="tab-dot' + (status === 'stopped' ? ' stopped' : '') + (status === 'completed' ? ' completed' : '') + '" id="tab-dot-' + id + '"></span><span class="tab-label" id="tab-label-' + id + '">#' + id + ' ' + (cmd || 'claude') + ' · ' + folder + '</span>';
+  tab.innerHTML = '<span class="tab-dot' + (status === 'stopped' ? ' stopped' : '') + (status === 'completed' ? ' completed' : '') + '" id="tab-dot-' + id + '"></span><span class="tab-label" id="tab-label-' + id + '">#' + id + ' ' + escapeHtml(cmd || 'claude') + ' · ' + escapeHtml(folder) + '</span>';
   tab.addEventListener('click', () => selectTab(id));
   tab.addEventListener('dblclick', e => {
     e.stopPropagation();
@@ -134,6 +150,7 @@ function ensureCard(id, cwd, status, logs, cmd, reason) {
   if (logs) logs.forEach(l => appendLog(id, l.src, l.text));
   if (reason) updateExitReason(id, reason);
   if (status === 'running') updateExitReason(id, null);
+  if (monitorMeta) updateMonitorMeta(id, monitorMeta);
   setTimeout(sendResize, 100);
 }
 
@@ -150,8 +167,8 @@ function bindCard(id, root) {
   if (killBtn) killBtn.addEventListener('click', () => killWorker(id));
   if (sendBtn) sendBtn.addEventListener('click', () => sendInput(id));
   if (inp) {
-    // IME 조합 중 Enter 누르면 마지막 글자가 중복되는 크롬 버그 회피:
-    // 조합 중일 때는 Enter를 IME 확정용으로 흘려보내고, compositionend에서 전송
+    // Workaround for Chrome IME bug: pressing Enter during CJK composition duplicates the last character.
+    // While composing, pass Enter through to the IME; send the input only on compositionend.
     let pendingEnter = false;
     inp.addEventListener('compositionend', () => {
       if (pendingEnter) {
@@ -214,26 +231,10 @@ function appendLog(id, src, text) {
     var wasAtBottom = isNearBottom(box);
     const line = document.createElement('div');
     line.className = 'log-line ' + src;
-    line.textContent = text;
+    line.innerHTML = (typeof ansiToHtml === 'function') ? ansiToHtml(text) : text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
     box.appendChild(line);
     if (wasAtBottom) box.scrollTop = box.scrollHeight;
   });
-}
-
-function markPrompt(line, text) {
-  const trimmed = text.trim();
-  if (!/^[❯>›]/.test(trimmed)) { line.textContent = text; return; }
-  const idx = text.indexOf(trimmed[0]);
-  const before = text.slice(0, idx);
-  const symbol = trimmed[0];
-  const after = text.slice(idx + symbol.length);
-  const mark = document.createElement('span');
-  mark.className = 'prompt-mark';
-  mark.textContent = symbol;
-  line.textContent = '';
-  if (before) line.appendChild(document.createTextNode(before));
-  line.appendChild(mark);
-  line.appendChild(document.createTextNode(after));
 }
 
 function updateExitReason(id, reason) {
@@ -313,6 +314,48 @@ function updateAIState(id, state) {
       el.textContent = 'waiting';
     } else {
       el.textContent = 'running';
+    }
+  });
+}
+
+function formatMetaTime(iso) {
+  if (!iso) return '-';
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '-';
+  return d.toLocaleTimeString();
+}
+
+function trimPrompt(prompt) {
+  if (!prompt) return '-';
+  const oneLine = String(prompt).replace(/\s+/g, ' ').trim();
+  if (!oneLine) return '-';
+  return oneLine.length > 52 ? oneLine.slice(0, 51) + '…' : oneLine;
+}
+
+function updateMonitorMeta(id, meta) {
+  const activity = formatMetaTime(meta.lastActivityAt);
+  const prompt = trimPrompt(meta.lastPromptExcerpt || meta.matchedText);
+  const status = meta.notificationStatus || '-';
+  const notifyAt = formatMetaTime(meta.lastNotificationAt);
+
+  document.querySelectorAll('#meta-activity-' + id).forEach(el => {
+    el.textContent = 'Activity: ' + activity;
+  });
+  document.querySelectorAll('#meta-pattern-' + id).forEach(el => {
+    const pattern = meta.lastMatchedPattern ? '[' + meta.lastMatchedPattern + '] ' : '';
+    el.textContent = 'Prompt: ' + pattern + prompt;
+    el.title = meta.lastPromptExcerpt || '';
+  });
+  document.querySelectorAll('#meta-notify-' + id).forEach(el => {
+    el.textContent = 'Notify: ' + status + (notifyAt !== '-' ? ' @ ' + notifyAt : '');
+  });
+  document.querySelectorAll('#meta-reset-' + id).forEach(el => {
+    if (meta.tokenResetAt) {
+      el.textContent = '⏱ Reset in: ' + meta.tokenResetAt;
+      el.style.display = '';
+      el.style.color = '#d29922';
+    } else {
+      el.style.display = 'none';
     }
   });
 }
