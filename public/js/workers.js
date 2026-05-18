@@ -221,7 +221,7 @@ function appendLog(id, src, text) {
     var wasAtBottom = isNearBottom(box);
     const line = document.createElement('div');
     line.className = 'log-line ' + src;
-    line.innerHTML = (typeof ansiToHtml === 'function') ? ansiToHtml(text) : text;
+    line.innerHTML = (typeof ansiToHtml === 'function') ? ansiToHtml(text) : text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
     box.appendChild(line);
     if (wasAtBottom) box.scrollTop = box.scrollHeight;
   });

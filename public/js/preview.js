@@ -182,11 +182,35 @@ function refreshPreview(tabId) {
   }
 }
 
+function isSafeUrl(url) {
+  try {
+    const parsed = new URL(url);
+    return parsed.protocol === 'https:';
+  } catch {
+    return false;
+  }
+}
+
+// Return a normalized, schema-validated URL string (https only), or null if invalid.
+function toSafeUrl(url) {
+  try {
+    const parsed = new URL(url);
+    if (parsed.protocol !== 'https:') return null;
+    return parsed.href;
+  } catch {
+    return null;
+  }
+}
+
 function updatePreviewTunnel(port, url) {
   for (const [tabId, info] of previewTabs) {
     if (info.port !== port) continue;
 
     info.url = url;
+
+    // Only use tunnel URLs with a trusted HTTPS scheme
+    const safeUrl = toSafeUrl(url);
+    if (!safeUrl) continue;
 
     // Both tab and split modes use the same element id pattern
     const iframe   = document.getElementById('preview-iframe-' + tabId);
@@ -194,14 +218,14 @@ function updatePreviewTunnel(port, url) {
     const urlLabel = document.getElementById('preview-url-'    + tabId);
 
     // Use the tunnel URL when accessed remotely or when a tunnel URL is provided
-    if (isRemoteAccess() && url) {
-      if (iframe)   iframe.src = url;
-      if (openLink) openLink.href = url;
-      if (urlLabel) urlLabel.textContent = url;
-    } else if (url) {
+    if (isRemoteAccess()) {
+      if (iframe)   iframe.src = safeUrl;
+      if (openLink) openLink.href = safeUrl;
+      if (urlLabel) urlLabel.textContent = safeUrl;
+    } else {
       // Local access: update external link only
-      if (openLink) openLink.href = url;
-      if (urlLabel) urlLabel.textContent = 'localhost:' + port + ' (' + url + ')';
+      if (openLink) openLink.href = safeUrl;
+      if (urlLabel) urlLabel.textContent = 'localhost:' + port + ' (' + safeUrl + ')';
     }
   }
 }
