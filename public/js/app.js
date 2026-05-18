@@ -1,11 +1,140 @@
 // ── Init & Event Binding ──
 
+const REMEMBER_PW_KEY = 'termhub.rememberedPw.v1';
+const REMEMBER_PW_DB = 'termhub-secure-login';
+const REMEMBER_PW_STORE = 'keys';
+const REMEMBER_PW_KEY_ID = 'remember-password-key';
+
+function toB64(bytes) {
+  let out = '';
+  bytes.forEach(b => { out += String.fromCharCode(b); });
+  return btoa(out);
+}
+
+function fromB64(str) {
+  const bin = atob(str);
+  const out = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i += 1) out[i] = bin.charCodeAt(i);
+  return out;
+}
+
+function openRememberDb() {
+  return new Promise((resolve, reject) => {
+    if (!window.indexedDB) return reject(new Error('indexedDB_unavailable'));
+    const req = indexedDB.open(REMEMBER_PW_DB, 1);
+    req.onupgradeneeded = event => {
+      const db = event.target.result;
+      if (!db.objectStoreNames.contains(REMEMBER_PW_STORE)) db.createObjectStore(REMEMBER_PW_STORE);
+    };
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error || new Error('indexedDB_open_failed'));
+  });
+}
+
+async function getRememberKey(createIfMissing = true) {
+  if (!window.crypto || !window.crypto.subtle) return null;
+  let db;
+  try {
+    db = await openRememberDb();
+  } catch {
+    return null;
+  }
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(REMEMBER_PW_STORE, 'readwrite');
+    const store = tx.objectStore(REMEMBER_PW_STORE);
+    const getReq = store.get(REMEMBER_PW_KEY_ID);
+    getReq.onsuccess = async () => {
+      let key = getReq.result || null;
+      if (!key && createIfMissing) {
+        try {
+          key = await crypto.subtle.generateKey(
+            { name: 'AES-GCM', length: 256 },
+            false,
+            ['encrypt', 'decrypt'],
+          );
+          store.put(key, REMEMBER_PW_KEY_ID);
+        } catch (e) {
+          reject(e);
+          return;
+        }
+      }
+      resolve(key);
+    };
+    getReq.onerror = () => reject(getReq.error || new Error('indexedDB_get_failed'));
+  }).finally(() => db.close());
+}
+
+async function clearRememberedPassword(clearInput = false) {
+  localStorage.removeItem(REMEMBER_PW_KEY);
+  const pwInput = document.getElementById('pw');
+  const remember = document.getElementById('remember-pw');
+  const clearBtn = document.getElementById('clear-saved-pw-btn');
+  if (pwInput && clearInput) pwInput.value = '';
+  if (remember) remember.checked = false;
+  if (clearBtn) clearBtn.style.display = 'none';
+}
+
+async function saveRememberedPassword(plainPassword) {
+  if (!plainPassword) return clearRememberedPassword(false);
+  const key = await getRememberKey(true);
+  if (!key) return clearRememberedPassword(false);
+
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const encoded = new TextEncoder().encode(plainPassword);
+  const cipher = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, encoded);
+  localStorage.setItem(REMEMBER_PW_KEY, JSON.stringify({
+    iv: toB64(iv),
+    data: toB64(new Uint8Array(cipher)),
+  }));
+  const clearBtn = document.getElementById('clear-saved-pw-btn');
+  if (clearBtn) clearBtn.style.display = '';
+}
+
+async function loadRememberedPassword() {
+  const payload = localStorage.getItem(REMEMBER_PW_KEY);
+  if (!payload) return null;
+  const key = await getRememberKey(false);
+  if (!key) return null;
+
+  try {
+    const parsed = JSON.parse(payload);
+    if (!parsed || !parsed.iv || !parsed.data) return null;
+    const iv = fromB64(parsed.iv);
+    const cipher = fromB64(parsed.data);
+    const plain = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, cipher);
+    return new TextDecoder().decode(plain);
+  } catch {
+    localStorage.removeItem(REMEMBER_PW_KEY);
+    return null;
+  }
+}
+
+async function initRememberedPassword() {
+  const pwInput = document.getElementById('pw');
+  const remember = document.getElementById('remember-pw');
+  const clearBtn = document.getElementById('clear-saved-pw-btn');
+  if (!pwInput || !remember || !clearBtn) return;
+
+  const saved = await loadRememberedPassword();
+  if (saved) {
+    pwInput.value = saved;
+    remember.checked = true;
+    clearBtn.style.display = '';
+  } else {
+    remember.checked = false;
+    clearBtn.style.display = 'none';
+  }
+}
+
 function doLogin() {
   const pw = document.getElementById('pw').value;
+  const rememberPw = document.getElementById('remember-pw').checked;
   apiPost('/api/login', { pw })
     .then(r => r.json())
     .then(d => {
       if (d.ok) {
+        const persist = rememberPw ? saveRememberedPassword(pw) : clearRememberedPassword();
+        Promise.resolve(persist).catch(() => {});
         document.getElementById('login').style.display = 'none';
         document.getElementById('app').style.display = 'flex';
         loadConfig();
@@ -31,6 +160,10 @@ function toggleToolbar() {
 
 document.getElementById('login-btn').addEventListener('click', doLogin);
 document.getElementById('pw').addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
+document.getElementById('remember-pw').addEventListener('change', e => {
+  if (!e.target.checked) clearRememberedPassword(false);
+});
+document.getElementById('clear-saved-pw-btn').addEventListener('click', () => clearRememberedPassword(true));
 document.getElementById('toggle-toolbar-btn').addEventListener('click', toggleToolbar);
 document.getElementById('dir-btn').addEventListener('click', toggleDropdown);
 document.getElementById('spawn-btn').addEventListener('click', () => {
@@ -53,6 +186,7 @@ document.addEventListener('click', e => {
 });
 
 window.addEventListener('resize', sendResize);
+initRememberedPassword();
 
 // ── Keyboard Shortcuts ──
 

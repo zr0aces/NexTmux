@@ -1088,6 +1088,35 @@ header h1 {
   cursor: pointer;
 }
 
+.login-remember {
+  width: 240px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: #8b949e;
+  user-select: none;
+}
+
+.login-remember input[type="checkbox"] {
+  width: 14px;
+  height: 14px;
+  accent-color: #1f6feb;
+}
+
+#login .login-secondary-btn {
+  background: #21262d;
+  border: 1px solid #30363d;
+  color: #8b949e;
+  font-size: 13px;
+  padding: 8px 0;
+}
+
+#login .login-secondary-btn:hover {
+  background: #30363d;
+  color: #e6edf3;
+}
+
 #login-err {
   color: #f85149;
   font-size: 13px;
