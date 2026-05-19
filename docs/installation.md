@@ -37,11 +37,15 @@ Set the following variables inside your `.env` file:
 ```env
 PORT=8081
 DASHBOARD_PASSWORD=replace-with-a-strong-password
+SESSION_TTL_MS=604800000
+TRUST_PROXY=0
 ```
 
 > [!NOTE]
 > - If `PORT` is not set, the server default is `8081`.
 > - The guided setup script prompts with `8080`; update `.env` afterward if you want `8081`.
+> - `SESSION_TTL_MS` controls auth token lifetime (default: 7 days).
+> - Set `TRUST_PROXY=1` only when requests always pass through a trusted reverse proxy that sets `X-Forwarded-For`.
 
 #### Recommended `config.json` Starter
 

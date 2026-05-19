@@ -12,6 +12,9 @@ This guide walks you through logging in, starting session workers, utilizing tmu
 3. Enter the configured dashboard password (`DASHBOARD_PASSWORD`).
 4. (Optional) Check **Remember Password** to bypass this screen automatically on subsequent visits.
 
+> [!NOTE]
+> Remember Password uses WebCrypto-backed encrypted browser storage. If WebCrypto is unavailable, credentials are not persisted.
+
 ### Step 2: Start Your First Tmux-Backed Session
 1. Click the **+** (New Session) button in the navigation header.
 2. Enter the **Working Directory** (you can type a custom path or quickly select one from your **Favorites** or **Recent Paths**).

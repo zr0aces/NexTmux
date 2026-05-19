@@ -75,6 +75,7 @@ tmux kill-session -t term-1
   - 🔵 Working → 🟢 Idle → 🟡 Waiting (Action Needed)
   - 🎛️ **Monitor Mode Selector** — Choose `Off`, `Monitor Only`, or `Auto Mode` per worker.
   - ⚡ **Auto Mode** — Sends `y` (or `1` when prompts display `1. yes`) and auto-selects `1. Stop and wait for limit to reset` for `/rate-limit-options`.
+  - ♻️ **Rate-Limit Auto-Recovery** — When reset time is parseable, waiting workers auto-return to running; Auto Mode sends `continue` after reset.
 - **Telegram & Discord Alerts** — Outbound webhook alerts when an AI CLI halts and requires human permission.
 - **Quick Controls** — Split/Tab layout toggles, favorites directory access, and an integrated virtual developer keyboard.
 
@@ -105,7 +106,11 @@ Ensure your `.env` contains a secure entry password:
 ```env
 PORT=8081
 DASHBOARD_PASSWORD=your-secret-password-here
+SESSION_TTL_MS=604800000
+TRUST_PROXY=0
 ```
+
+`TRUST_PROXY=1` should only be enabled behind a trusted reverse proxy.
 
 ### 3. Launch Server
 ```bash

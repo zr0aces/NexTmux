@@ -28,6 +28,7 @@ Each worker now uses a single mode selector with three states:
 - `proceed`/`continue` are no longer auto-response behaviors; use Virtual Keyboard quick commands for those manual actions.
 - Auto Mode sends yes-style responses (`y` or `1` for `1. yes` list prompts), and for `/rate-limit-options` it picks `1` to wait for reset.
 - When a rate limit reset time is detected (for example: `resets 10:20am (Asia/Bangkok)`), the tooltip and Telegram notification include that reset time.
+- Auto Mode deduplicates repeated prompt detections to avoid sending the same answer repeatedly on noisy waiting screens.
 
 ---
 
@@ -75,12 +76,12 @@ To override defaults via configuration file, add an `"aiMonitor"` block:
     "enabled": true,
     "pollIntervalMs": 1000,
     "idleThresholdMs": 5000,
-    "linesToScan": 120,
+    "linesToInspect": 120,
     "notifyCooldownMs": 120000,
     "patterns": [
-      "(?:Press|Type|Hit)\\s+(?:Enter|any key)\\s+to\\s+continue",
-      "Confirm\\s+action|Allow\\s+tool\\s+execution",
-      "\\?\\s+Allow\\s+(?:read|write|execute|network|shell)"
+      { "name": "continue", "regex": "continue\\?" },
+      { "name": "confirmation", "regex": "\\[y/N\\]" },
+      { "name": "token_limit", "regex": "token limit reached" }
     ]
   }
 }
