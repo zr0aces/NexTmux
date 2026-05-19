@@ -573,8 +573,7 @@ function pollOutput(id) {
     sendWaitingAlert(id, inspect.detection, now);
   }
 
-  const shouldHandleRateLimitOptionsNow = inspect.changed && inspect.detection?.patternName === "rate_limit_options";
-  if (nextState === "waiting" && w.autoMode && (stateChanged || shouldHandleRateLimitOptionsNow)) {
+  if (nextState === "waiting" && w.autoMode && (stateChanged || inspect.changed)) {
     const autoResponse = resolveAutoModeResponse(inspect.detection);
     if (autoResponse) sendInput(id, autoResponse);
   }
