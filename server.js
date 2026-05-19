@@ -49,6 +49,7 @@ const ISSUE_ALERT_COOLDOWN_MS = 120000; // 120s cooldown per issue key
 const LOGIN_WINDOW_MS = 10 * 60 * 1000;
 const MAX_LOGIN_ATTEMPTS = 20;
 const loginAttempts = new Map();
+const RATE_LIMIT_PATTERNS = new Set(["token_limit", "usage_limit", "rate_limited", "rate_limit_options"]);
 
 function createToken() {
   return crypto.randomBytes(32).toString("hex");
@@ -219,6 +220,13 @@ function inferExitReason(w, fallback) {
 function resolveAutoModeResponse(detection) {
   const excerpt = String(detection?.excerpt || "");
   const hasListYesOption = /(?:^|\n)\s*1\s*[\].):]\s*yes\b/im.test(excerpt);
+  const hasRateLimitOptionOne = /(?:^|\n)\s*1\s*[\].):]\s*stop\s+and\s+wait\s+for\s+limit\s+to\s+reset\b/im.test(excerpt);
+  const hasAnyOptionOne = /(?:^|\n)\s*1\s*[\].):]/im.test(excerpt);
+  const looksRateLimited = RATE_LIMIT_PATTERNS.has(detection?.patternName)
+    || /(?:\/rate-limit-options|rate\s*limit|usage\s*limit|token\s*limit|you(?:'|’)ve hit your limit)/i.test(excerpt);
+
+  if (hasRateLimitOptionOne || (/\/rate-limit-options/i.test(excerpt) && hasAnyOptionOne)) return "1";
+  if (looksRateLimited) return null;
   return hasListYesOption ? "1" : "y";
 }
 
@@ -428,6 +436,7 @@ function sendWaitingAlert(id, detection, now = Date.now()) {
     patternName: detection?.patternName,
     matchedText: detection?.matchedText,
     excerpt: detection?.excerpt || w.lastPromptExcerpt || "",
+    resetTime: extractResetTime(detection?.excerpt || "") || w.tokenResetAt || null,
     timestamp: new Date(now).toISOString(),
   }).then((result) => {
     if (result.ok) {
@@ -524,9 +533,10 @@ function pollOutput(id) {
 
   if (inspect.detection?.matched) {
     sessionStateManager.updateMatch(w, inspect.detection);
-    // Extract usage-limit reset time when a token/usage/rate-limit pattern fires
-    const LIMIT_PATTERNS = new Set(["token_limit", "usage_limit", "rate_limited"]);
-    if (LIMIT_PATTERNS.has(inspect.detection.patternName)) {
+    const detectionExcerpt = String(inspect.detection.excerpt || "");
+    const maybeRateLimitContext = RATE_LIMIT_PATTERNS.has(inspect.detection.patternName)
+      || /(?:rate\s*limit|usage\s*limit|token\s*limit|you(?:'|’)ve hit your limit|resets?\s)/i.test(detectionExcerpt);
+    if (maybeRateLimitContext) {
       const resetTime = extractResetTime(inspect.detection.excerpt);
       if (resetTime) w.tokenResetAt = resetTime;
     }
@@ -547,8 +557,10 @@ function pollOutput(id) {
     sendWaitingAlert(id, inspect.detection, now);
   }
 
-  if (nextState === "waiting" && stateChanged && w.autoMode) {
-    sendInput(id, resolveAutoModeResponse(inspect.detection));
+  const shouldHandleRateLimitOptionsNow = inspect.changed && inspect.detection?.patternName === "rate_limit_options";
+  if (nextState === "waiting" && w.autoMode && (stateChanged || shouldHandleRateLimitOptionsNow)) {
+    const autoResponse = resolveAutoModeResponse(inspect.detection);
+    if (autoResponse) sendInput(id, autoResponse);
   }
 
   broadcastMonitorMeta(id);

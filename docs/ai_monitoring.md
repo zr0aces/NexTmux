@@ -20,13 +20,14 @@ Each worker now uses a single mode selector with three states:
 
 - **Off** — AI supervision is disabled.
 - **Monitor Only** — Detects wait states and sends Telegram alerts, but never sends terminal input.
-- **Auto Mode** — Includes monitoring + alerts and auto-responds with **`y`** (or **`1`** when prompts show `1. yes`).
+- **Auto Mode** — Includes monitoring + alerts, auto-responds with **`y`** (or **`1`** when prompts show `1. yes`), and auto-selects rate-limit option **`1. Stop and wait for limit to reset`** when available.
 
 ### Mode Behavior Notes
 
 - Monitoring mode is now unified in one control (`Off`, `Monitor Only`, `Auto Mode`).
 - `proceed`/`continue` are no longer auto-response behaviors; use Virtual Keyboard quick commands for those manual actions.
-- Auto Mode only sends yes-style responses (`y` or `1` for `1. yes` list prompts).
+- Auto Mode sends yes-style responses (`y` or `1` for `1. yes` list prompts), and for `/rate-limit-options` it picks `1` to wait for reset.
+- When a rate limit reset time is detected (for example: `resets 10:20am (Asia/Bangkok)`), the tooltip and Telegram notification include that reset time.
 
 ---
 

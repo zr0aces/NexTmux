@@ -394,7 +394,7 @@ function updateMonitorMeta(id, meta) {
   });
   document.querySelectorAll('#meta-mode-' + id).forEach(el => {
     const label = mode === 'auto'
-      ? 'Auto Mode (auto-respond yes / 1)'
+      ? 'Auto Mode (yes/1 + auto rate-limit wait)'
       : (mode === 'monitor' ? 'Monitor Only' : 'Off');
     el.textContent = 'Mode: ' + label;
   });
