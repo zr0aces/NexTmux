@@ -48,3 +48,30 @@ test("hydrateWorker restores resetAtEpochMs from persisted snapshot", async () =
   assert.equal(w2.resetAtEpochMs, 42000);
   try { fs.unlinkSync(filePath); } catch {}
 });
+
+test("setMonitorMode rejects invalid mode values", () => {
+  const mgr = createSessionStateManager({ stateFilePath: tmpPath() });
+  const w = { sessionName: "term-1", aiMonitorEnabled: true, autoMode: false };
+  const result = mgr.setMonitorMode(w, "unexpected");
+  assert.equal(result, null);
+  assert.equal(w.aiMonitorEnabled, true);
+  assert.equal(w.autoMode, false);
+});
+
+test("hydrateWorker uses legacy flags when monitorMode is absent", () => {
+  const filePath = tmpPath();
+  fs.writeFileSync(filePath, JSON.stringify({
+    "term-1": {
+      aiMonitorEnabled: false,
+      autoMode: false,
+    },
+  }, null, 2), "utf8");
+
+  const mgr = createSessionStateManager({ stateFilePath: filePath });
+  const w = { sessionName: "term-1", aiMonitorEnabled: true, autoMode: true };
+  mgr.hydrateWorker(w);
+
+  assert.equal(w.aiMonitorEnabled, false);
+  assert.equal(w.autoMode, false);
+  try { fs.unlinkSync(filePath); } catch {}
+});

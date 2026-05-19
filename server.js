@@ -342,6 +342,7 @@ function initializeWorkerMonitorState(worker) {
   worker.lastPromptExcerpt = worker.lastPromptExcerpt || null;
   worker.lastNotificationAt = worker.lastNotificationAt || null;
   worker.notificationStatus = worker.notificationStatus || null;
+  worker.lastAutoResponseKey = worker.lastAutoResponseKey || null;
   worker.aiMonitorEnabled = worker.aiMonitorEnabled !== undefined ? worker.aiMonitorEnabled : monitorConfig.enabled;
   worker.autoMode = worker.autoMode !== undefined ? worker.autoMode : false;
   sessionStateManager.hydrateWorker(worker);
@@ -565,6 +566,10 @@ function pollOutput(id) {
     broadcast({ type: "aiState", id, state: nextState });
   }
 
+  if (nextState !== "waiting") {
+    w.lastAutoResponseKey = null;
+  }
+
   if (nextState === "waiting" || nextState === "idle" || nextState === "running") {
     sessionStateManager.setWaitingState(w, nextState);
   }
@@ -573,9 +578,21 @@ function pollOutput(id) {
     sendWaitingAlert(id, inspect.detection, now);
   }
 
-  if (nextState === "waiting" && w.autoMode && (stateChanged || inspect.changed)) {
+  if (nextState === "waiting" && w.autoMode && inspect.detection?.matched && (stateChanged || inspect.changed)) {
+    const responseKey = [
+      inspect.detection.patternName || "",
+      inspect.detection.matchedText || "",
+      inspect.detection.excerpt || "",
+    ].join("::");
+    if (!stateChanged && responseKey && w.lastAutoResponseKey === responseKey) {
+      broadcastMonitorMeta(id);
+      return;
+    }
     const autoResponse = resolveAutoModeResponse(inspect.detection);
-    if (autoResponse) sendInput(id, autoResponse);
+    if (autoResponse) {
+      sendInput(id, autoResponse);
+      w.lastAutoResponseKey = responseKey || String(now);
+    }
   }
 
   broadcastMonitorMeta(id);
@@ -880,6 +897,7 @@ const server = http.createServer(async (req, res) => {
     const w = workers.get(id);
     if (!w) return json(res, 404, { ok: false });
     const nextMode = sessionStateManager.setMonitorMode(w, mode);
+    if (!nextMode) return json(res, 400, { ok: false, error: "invalid monitor mode" });
     broadcast({ type: "monitorMeta", id, ...getMonitorMeta(w) });
     return json(res, 200, { ok: true, mode: nextMode });
   }
