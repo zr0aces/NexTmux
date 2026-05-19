@@ -105,15 +105,126 @@ cat /tmp/tmuxhub.log
 
 ## 🐧 Ubuntu / Debian Installation
 
-To install TmuxHub on Debian-based Linux systems:
+### 1) Install Dependencies
 
 ```bash
 sudo apt-get update
 sudo apt-get install -y nodejs npm tmux
+```
+
+### 2) Prepare the Project
+
+```bash
+git clone https://github.com/zr0aces/TmuxHub.git
+cd TmuxHub
 npm install
 cp .env.example .env
 cp config.example.json config.json
+```
+
+### 3) Run Manually (Optional Quick Check)
+
+```bash
 npm start
+```
+
+### 4) Create a `systemd` Service with `systemctl` (Recommended)
+
+You can run TmuxHub as either:
+- a **system service** (`/etc/systemd/system`) for machine-wide startup, or
+- a **user service** (`~/.config/systemd/user`) for per-user startup.
+
+Use absolute paths in `WorkingDirectory` and `ExecStart`.
+
+#### Option A — System Service (all users)
+
+1. Create the service file:
+   ```bash
+   sudo nano /etc/systemd/system/tmuxhub.service
+   ```
+2. Paste and adjust this example:
+   ```ini
+   [Unit]
+   Description=TmuxHub Dashboard Server
+   After=network.target
+
+   [Service]
+   Type=simple
+   User=YOUR_LINUX_USER
+   Group=YOUR_LINUX_USER
+   WorkingDirectory=/absolute/path/to/TmuxHub
+   ExecStart=/usr/bin/npm start
+   Restart=on-failure
+   RestartSec=3
+   Environment=NODE_ENV=production
+
+   [Install]
+   WantedBy=multi-user.target
+   ```
+3. Reload `systemd` and enable the service:
+   ```bash
+   sudo systemctl daemon-reload
+   sudo systemctl enable tmuxhub
+   sudo systemctl start tmuxhub
+   ```
+
+#### Option B — User Service (current user only)
+
+1. Create the service directory and file:
+   ```bash
+   mkdir -p ~/.config/systemd/user
+   nano ~/.config/systemd/user/tmuxhub.service
+   ```
+2. Paste and adjust this example:
+   ```ini
+   [Unit]
+   Description=TmuxHub Dashboard Server (User Service)
+   After=default.target
+
+   [Service]
+   Type=simple
+   WorkingDirectory=/absolute/path/to/TmuxHub
+   ExecStart=/usr/bin/npm start
+   Restart=on-failure
+   RestartSec=3
+   Environment=NODE_ENV=production
+
+   [Install]
+   WantedBy=default.target
+   ```
+3. Reload and enable the user service:
+   ```bash
+   systemctl --user daemon-reload
+   systemctl --user enable tmuxhub
+   systemctl --user start tmuxhub
+   ```
+
+> [!TIP]
+> For user services that must start at boot without login, enable lingering:
+> `sudo loginctl enable-linger YOUR_LINUX_USER`
+
+### 5) Manage the Service
+
+Use these commands for routine operations.
+
+#### System service commands
+
+```bash
+sudo systemctl status tmuxhub
+sudo systemctl restart tmuxhub
+sudo systemctl stop tmuxhub
+sudo systemctl disable tmuxhub
+sudo journalctl -u tmuxhub -f
+```
+
+#### User service commands
+
+```bash
+systemctl --user status tmuxhub
+systemctl --user restart tmuxhub
+systemctl --user stop tmuxhub
+systemctl --user disable tmuxhub
+journalctl --user -u tmuxhub -f
 ```
 
 ---
