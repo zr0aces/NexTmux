@@ -6,7 +6,7 @@ const { execSync, execFileSync, spawn } = require("child_process");
 const fs = require("fs");
 const path = require("path");
 const { WebSocketServer } = require("ws");
-const { DEFAULT_PATTERNS, createPatternEngine, extractResetTime } = require("./lib/patternEngine");
+const { DEFAULT_PATTERNS, createPatternEngine, extractResetTime, parseResetEpoch } = require("./lib/patternEngine");
 const { createTelegramService } = require("./lib/telegramService");
 const { createSessionStateManager } = require("./lib/sessionStateManager");
 const { createWatcherEngine } = require("./lib/watcherEngine");
@@ -508,6 +508,18 @@ function pollOutput(id) {
   }
 
   const now = Date.now();
+
+  if (w.aiState === "waiting" && w.resetAtEpochMs && now >= w.resetAtEpochMs) {
+    sessionStateManager.clearResetEpoch(w);
+    w.tokenResetAt = null;
+    w.aiState = "running";
+    sessionStateManager.setWaitingState(w, "running");
+    broadcast({ type: "aiState", id, state: "running" });
+    broadcastMonitorMeta(id);
+    if (w.autoMode) sendInput(id, "continue");
+    return;
+  }
+
   const inspect = w.aiMonitorEnabled && monitorConfig.enabled
     ? watcherEngine.inspect({
         output,
@@ -538,7 +550,11 @@ function pollOutput(id) {
       || /(?:rate\s*limit|usage\s*limit|token\s*limit|you(?:'|’)ve hit your limit|resets?\s)/i.test(detectionExcerpt);
     if (maybeRateLimitContext) {
       const resetTime = extractResetTime(inspect.detection.excerpt);
-      if (resetTime) w.tokenResetAt = resetTime;
+      if (resetTime) {
+        w.tokenResetAt = resetTime;
+        const epoch = parseResetEpoch(resetTime, now);
+        if (epoch) sessionStateManager.setResetEpoch(w, epoch);
+      }
     }
   }
 
