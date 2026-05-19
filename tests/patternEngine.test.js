@@ -61,6 +61,14 @@ test("parseResetEpoch - absolute AM/PM with PST timezone (UTC-8)", () => {
   assert.equal(parseResetEpoch("11:00 AM PST", NOW), expected);
 });
 
+test("parseResetEpoch - absolute 24-hour time with named timezone", () => {
+  // "15:30 PST" = 23:30 UTC; NOW is 18:00 UTC → same day
+  const d = new Date(NOW);
+  const todayAt1530UTC = Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), 15, 30, 0, 0);
+  const expected = todayAt1530UTC - (-480) * 60000; // PST offset (-480 min) → +8h → 23:30 UTC
+  assert.equal(parseResetEpoch("15:30 PST", NOW), expected);
+});
+
 test("parseResetEpoch - unparseable returns null", () => {
   assert.equal(parseResetEpoch("soon", NOW), null);
   assert.equal(parseResetEpoch("unknown time", NOW), null);
