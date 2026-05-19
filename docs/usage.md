@@ -23,7 +23,7 @@ This will spawn an isolated tmux session named `term-{id}` (e.g., `term-1`) runn
 ### Step 3: Manage Active Workflows
 - **Terminal Logs**: Watch live output streaming directly from the active tmux pane inside the high-density log viewer.
 - **Command Input**: Type commands inside the lower prompt input field and press **Send** (or Enter) to feed them straight into the tmux stdin.
-- **Mechanical Toolkit (Keyboard Icon)**: Click the **⌨** keyboard button to reveal a compact layout of standard keyboard keys (`esc`, `↑`, `↓`, `↵`, `tab`, `⇧tab`, `⌃c`) for quick, one-click layout interaction.
+- **Mechanical Toolkit (Keyboard Icon)**: Click the **⌨** keyboard button to reveal standard key shortcuts (`esc`, `↑`, `↓`, `↵`, `tab`, `⇧tab`, `⌃c`) plus quick command buttons (`proceed`, `continue`, `yes`) for fast manual interaction.
 - **Git Diff Inspector**: Click the **Diff** action pill on any session card to review real-time git state and inspect local changes in that worker's active directory.
 - **Tab & Split Views**: Toggle between **Tab** view (for clean, focused, single-pane work) and **Split** view (to monitor multiple concurrent terminal tasks side-by-side).
 

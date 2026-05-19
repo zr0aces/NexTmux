@@ -337,6 +337,7 @@ function initializeWorkerMonitorState(worker) {
   worker.aiMonitorEnabled = worker.aiMonitorEnabled !== undefined ? worker.aiMonitorEnabled : monitorConfig.enabled;
   worker.autoMode = worker.autoMode !== undefined ? worker.autoMode : false;
   sessionStateManager.hydrateWorker(worker);
+  if (worker.autoMode && worker.aiMonitorEnabled === false) worker.aiMonitorEnabled = true;
 }
 
 function getMonitorMeta(worker) {
@@ -409,13 +410,15 @@ function sendWaitingAlert(id, detection, now = Date.now()) {
   if (!w) return;
 
   const decision = sessionStateManager.shouldNotify({
-    sessionName: w.sessionName,
+    worker: w,
     patternName: detection?.patternName || "waiting",
+    matchedText: detection?.matchedText || "",
     excerpt: detection?.excerpt || "",
     now,
   });
   if (!decision.shouldSend) {
-    sessionStateManager.markNotification(w, "skipped_debounce", now);
+    const status = decision.reason === "duplicate" ? "skipped_duplicate" : "skipped_debounce";
+    sessionStateManager.markNotification(w, status, now);
     broadcastMonitorMeta(id);
     return;
   }
@@ -428,9 +431,9 @@ function sendWaitingAlert(id, detection, now = Date.now()) {
     timestamp: new Date(now).toISOString(),
   }).then((result) => {
     if (result.ok) {
-      sessionStateManager.markNotification(w, "sent", now);
+      sessionStateManager.markNotification(w, "sent", now, decision.key);
     } else if (result.skipped) {
-      sessionStateManager.markNotification(w, "skipped_debounce", now);
+      sessionStateManager.markNotification(w, "skipped", now);
     } else {
       sessionStateManager.markNotification(w, "failed", now);
       console.warn("Telegram waiting alert failed", String(w.sessionName), String(result.error || "unknown_error"));
@@ -841,6 +844,17 @@ const server = http.createServer(async (req, res) => {
     const enabled = sessionStateManager.toggleAutoMode(w);
     broadcast({ type: "monitorMeta", id, ...getMonitorMeta(w) });
     return json(res, 200, { ok: true, enabled });
+  }
+
+  if (method === "POST" && url === "/api/set-monitor-mode") {
+    const { ok, body } = await parseBody(req);
+    if (!ok || !body) return json(res, 400, { error: "invalid request body" });
+    const { id, mode } = body;
+    const w = workers.get(id);
+    if (!w) return json(res, 404, { ok: false });
+    const nextMode = sessionStateManager.setMonitorMode(w, mode);
+    broadcast({ type: "monitorMeta", id, ...getMonitorMeta(w) });
+    return json(res, 200, { ok: true, mode: nextMode });
   }
 
   if (method === "GET" && url === "/api/git-diff") {
