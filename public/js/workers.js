@@ -379,9 +379,10 @@ function updateMonitorMeta(id, meta) {
   });
   document.querySelectorAll('#meta-reset-' + id).forEach(el => {
     if (meta.tokenResetAt) {
-      el.textContent = '⏱ Reset in: ' + meta.tokenResetAt;
+      const armed = meta.resetAtEpochMs != null;
+      el.textContent = '⏱ Reset in: ' + meta.tokenResetAt + (armed ? '  [armed]' : '');
       el.style.display = '';
-      el.style.color = '#d29922';
+      el.style.color = armed ? '#58a6ff' : '#d29922';
     } else {
       el.style.display = 'none';
     }
