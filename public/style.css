@@ -666,7 +666,7 @@ header h1 {
 
 .diff-btn,
 .kill-btn,
-.ai-monitor-toggle {
+.monitor-mode-selector {
   height: 24px;
   font-family: var(--font-ui);
   font-size: 11px;
@@ -682,6 +682,10 @@ header h1 {
   align-items: center;
   justify-content: center;
   outline: none;
+}
+
+.monitor-mode-selector {
+  min-width: 110px;
 }
 
 .diff-btn:hover {
@@ -710,28 +714,41 @@ header h1 {
   display: inline-flex;
 }
 
-.ai-monitor-toggle.enabled {
+.monitor-mode-selector.mode-monitor {
   color: var(--accent-success);
   border-color: rgba(16, 185, 129, 0.2);
   background: rgba(16, 185, 129, 0.06);
 }
 
-.ai-monitor-toggle.enabled:hover {
+.monitor-mode-selector.mode-monitor:hover {
   background: var(--accent-success);
   border-color: var(--accent-success);
   color: #fff;
   box-shadow: 0 0 8px rgba(16, 185, 129, 0.3);
 }
 
-.ai-monitor-toggle.disabled {
+.monitor-mode-selector.mode-off {
   color: var(--text-muted);
   border-color: var(--border-color);
   background: transparent;
 }
 
-.ai-monitor-toggle.disabled:hover {
+.monitor-mode-selector.mode-off:hover {
   background: rgba(255, 255, 255, 0.05);
   color: var(--text-secondary);
+}
+
+.monitor-mode-selector.mode-auto {
+  color: var(--accent-warning);
+  border-color: rgba(245, 158, 11, 0.2);
+  background: rgba(245, 158, 11, 0.06);
+}
+
+.monitor-mode-selector.mode-auto:hover {
+  background: var(--accent-warning);
+  border-color: var(--accent-warning);
+  color: #fff;
+  box-shadow: 0 0 8px rgba(245, 158, 11, 0.3);
 }
 
 .ai-telemetry-tooltip {
@@ -981,6 +998,10 @@ header h1 {
 
 .key-grid .key-enter {
   font-size: 14px;
+}
+
+.key-grid .quick-cmd-btn {
+  grid-column: span 2;
 }
 
 .key-btn {
@@ -1763,7 +1784,7 @@ header h1 {
 
   .diff-btn,
   .kill-btn,
-  .ai-monitor-toggle {
+  .monitor-mode-selector {
     height: 20px;
     font-size: 10px;
     padding: 0 6px;

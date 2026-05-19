@@ -69,15 +69,20 @@ function ensureCard(id, cwd, status, logs, cmd, reason, monitorMeta) {
         '<span class="card-title" id="card-title-' + id + '">#' + id + ' ' + escapeHtml(cmdLabel) + '</span>' +
         '<span class="card-cwd" id="card-cwd-' + id + '" title="' + escapeHtml(cwd) + '">' + escapeHtml(displayPath(cwd)) + '</span>' +
       '</div>' +
-      '<div class="card-actions">' +
-        '<span class="badge' + (status === 'stopped' ? ' stopped' : '') + (status === 'completed' ? ' completed' : '') + '" id="badge-' + id + '">' + status + '</span>' +
-        '<div class="ai-monitor-wrap">' +
-          '<button class="ai-monitor-toggle" id="ai-monitor-' + id + '" title="Toggle AI Monitor">👀 On</button>' +
+        '<div class="card-actions">' +
+          '<span class="badge' + (status === 'stopped' ? ' stopped' : '') + (status === 'completed' ? ' completed' : '') + '" id="badge-' + id + '">' + status + '</span>' +
+          '<div class="ai-monitor-wrap">' +
+          '<select class="monitor-mode-selector" id="monitor-mode-' + id + '" title="AI Monitor Mode">' +
+            '<option value="off">Off</option>' +
+            '<option value="monitor">Monitor Only</option>' +
+            '<option value="auto">Auto Mode</option>' +
+          '</select>' +
           '<div class="ai-telemetry-tooltip" id="tooltip-' + id + '">' +
             '<div class="tooltip-title">🧠 AI Supervision</div>' +
             '<div class="tooltip-line" id="meta-activity-' + id + '">Activity: -</div>' +
             '<div class="tooltip-line" id="meta-pattern-' + id + '">Prompt: -</div>' +
             '<div class="tooltip-line" id="meta-notify-' + id + '">Notify: -</div>' +
+            '<div class="tooltip-line" id="meta-mode-' + id + '">Mode: Off</div>' +
             '<div class="tooltip-line" id="meta-reset-' + id + '" style="display:none">Reset: -</div>' +
           '</div>' +
         '</div>' +
@@ -102,6 +107,9 @@ function ensureCard(id, cwd, status, logs, cmd, reason, monitorMeta) {
             '<button class="key-btn" id="key-tab-' + id + '">tab</button>' +
             '<button class="key-btn" id="key-stab-' + id + '">⇧tab</button>' +
             '<button class="key-btn" id="key-ctrlc-' + id + '">⌃c</button>' +
+            '<button class="key-btn quick-cmd-btn" id="quick-proceed-' + id + '">proceed</button>' +
+            '<button class="key-btn quick-cmd-btn" id="quick-continue-' + id + '">continue</button>' +
+            '<button class="key-btn quick-cmd-btn" id="quick-yes-' + id + '">yes</button>' +
           '</div>' +
         '</div>' +
       '</div>' +
@@ -168,14 +176,14 @@ function bindCard(id, root) {
   const killBtn = q('#kill-' + id);
   const sendBtn = q('#send-' + id);
   const inp = q('#inp-' + id);
-  const aiMonitorBtn = q('#ai-monitor-' + id);
+  const monitorModeSelector = q('#monitor-mode-' + id);
 
   const diffBtn = q('#diff-' + id);
   if (diffBtn) diffBtn.addEventListener('click', () => openGitDiff(id));
 
   if (killBtn) killBtn.addEventListener('click', () => killWorker(id));
   if (sendBtn) sendBtn.addEventListener('click', () => sendInput(id));
-  if (aiMonitorBtn) aiMonitorBtn.addEventListener('click', () => toggleAiMonitor(id));
+  if (monitorModeSelector) monitorModeSelector.addEventListener('change', (e) => setMonitorMode(id, e.target.value));
   if (inp) {
     // Workaround for Chrome IME bug: pressing Enter during CJK composition duplicates the last character.
     // While composing, pass Enter through to the IME; send the input only on compositionend.
@@ -227,6 +235,16 @@ function bindCard(id, root) {
   Object.entries(keyMap).forEach(([btnId, tmuxKey]) => {
     const btn = q('#key-' + btnId + '-' + id);
     if (btn) btn.addEventListener('click', () => sendSpecialKey(id, tmuxKey));
+  });
+
+  const quickMap = {
+    proceed: 'proceed',
+    continue: 'continue',
+    yes: 'yes'
+  };
+  Object.entries(quickMap).forEach(([btnId, value]) => {
+    const btn = q('#quick-' + btnId + '-' + id);
+    if (btn) btn.addEventListener('click', () => sendQuickCommand(id, value));
   });
 }
 
@@ -368,10 +386,17 @@ function updateMonitorMeta(id, meta) {
       el.style.display = 'none';
     }
   });
-  document.querySelectorAll('#ai-monitor-' + id).forEach(el => {
-    const isEnabled = meta.aiMonitorEnabled !== false;
-    el.textContent = (isEnabled ? '👀 On' : '👁 Off');
-    el.className = 'ai-monitor-toggle' + (isEnabled ? ' enabled' : ' disabled');
+  const mode = meta.monitorMode || (meta.aiMonitorEnabled === false ? 'off' : (meta.autoMode === true ? 'auto' : 'monitor'));
+  document.querySelectorAll('#monitor-mode-' + id).forEach(el => {
+    el.value = mode;
+    el.className = 'monitor-mode-selector ' +
+      (mode === 'auto' ? 'mode-auto' : (mode === 'monitor' ? 'mode-monitor' : 'mode-off'));
+  });
+  document.querySelectorAll('#meta-mode-' + id).forEach(el => {
+    const label = mode === 'auto'
+      ? 'Auto Mode (auto-respond yes / 1)'
+      : (mode === 'monitor' ? 'Monitor Only' : 'Off');
+    el.textContent = 'Mode: ' + label;
   });
 }
 
@@ -437,18 +462,23 @@ function sendInput(id) {
   apiPost('/api/input', { id, text });
 }
 
+function sendQuickCommand(id, text) {
+  notifyActive();
+  apiPost('/api/input', { id, text });
+}
+
 function killWorker(id) {
   if (!confirm('Stop Worker #' + id + '?')) return;
   apiPost('/api/kill', { id });
 }
 
-function toggleAiMonitor(id) {
-  apiPost('/api/toggle-ai-monitor', { id })
+function setMonitorMode(id, mode) {
+  apiPost('/api/set-monitor-mode', { id, mode })
     .then(r => r.json().catch(() => ({})).then(d => ({ ok: r.ok, d })))
     .then(({ ok }) => {
-      if (!ok) console.error('Failed to toggle AI monitor');
+      if (!ok) console.error('Failed to set monitor mode');
     })
-    .catch(e => console.error('Error toggling AI monitor:', e));
+    .catch(e => console.error('Error setting monitor mode:', e));
 }
 
 function spawnSession() {

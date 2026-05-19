@@ -14,9 +14,27 @@ The supervisor actively monitors active tmux panes by capturing and scanning sta
 
 ---
 
+## 🎛️ Monitor Mode Selector
+
+Each worker now uses a single mode selector with three states:
+
+- **Off** — AI supervision is disabled.
+- **Monitor Only** — Detects wait states and sends Telegram alerts, but never sends terminal input.
+- **Auto Mode** — Includes monitoring + alerts and auto-responds with **`y`** (or **`1`** when prompts show `1. yes`).
+
+### Mode Behavior Notes
+
+- Monitoring mode is now unified in one control (`Off`, `Monitor Only`, `Auto Mode`).
+- `proceed`/`continue` are no longer auto-response behaviors; use Virtual Keyboard quick commands for those manual actions.
+- Auto Mode only sends yes-style responses (`y` or `1` for `1. yes` list prompts).
+
+---
+
 ## ✈️ Outbound Telegram Alerts
 
-To keep you updated on long-running tasks while you are away from your desk, TmuxHub can dispatch instant, debounced Telegram notifications whenever a worker enters the **Waiting** state.
+To keep you updated on long-running tasks while you are away from your desk, TmuxHub dispatches Telegram notifications when workers enter the **Waiting** state.
+
+Duplicate wait-state messages are deduplicated and only sent once per unique message content.
 
 ### Enabling Telegram Notifications
 
