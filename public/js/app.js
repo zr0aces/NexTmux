@@ -39,29 +39,35 @@ async function getRememberKey(createIfMissing = true) {
   } catch {
     return null;
   }
-  return new Promise((resolve, reject) => {
-    const tx = db.transaction(REMEMBER_PW_STORE, 'readwrite');
-    const store = tx.objectStore(REMEMBER_PW_STORE);
-    const getReq = store.get(REMEMBER_PW_KEY_ID);
-    getReq.onsuccess = async () => {
-      let key = getReq.result || null;
-      if (!key && createIfMissing) {
-        try {
-          key = await crypto.subtle.generateKey(
-            { name: 'AES-GCM', length: 256 },
-            false,
-            ['encrypt', 'decrypt'],
-          );
-          store.put(key, REMEMBER_PW_KEY_ID);
-        } catch (e) {
-          reject(e);
-          return;
-        }
-      }
-      resolve(key);
-    };
-    getReq.onerror = () => reject(getReq.error || new Error('indexedDB_get_failed'));
-  }).finally(() => db.close());
+  try {
+    const existing = await new Promise((resolve, reject) => {
+      const tx = db.transaction(REMEMBER_PW_STORE, 'readonly');
+      const store = tx.objectStore(REMEMBER_PW_STORE);
+      const getReq = store.get(REMEMBER_PW_KEY_ID);
+      getReq.onsuccess = () => resolve(getReq.result || null);
+      getReq.onerror = () => reject(getReq.error || new Error('indexedDB_get_failed'));
+    });
+
+    if (existing || !createIfMissing) return existing;
+
+    const nextKey = await crypto.subtle.generateKey(
+      { name: 'AES-GCM', length: 256 },
+      false,
+      ['encrypt', 'decrypt'],
+    );
+
+    await new Promise((resolve, reject) => {
+      const tx = db.transaction(REMEMBER_PW_STORE, 'readwrite');
+      const store = tx.objectStore(REMEMBER_PW_STORE);
+      const putReq = store.put(nextKey, REMEMBER_PW_KEY_ID);
+      putReq.onsuccess = () => resolve();
+      putReq.onerror = () => reject(putReq.error || new Error('indexedDB_put_failed'));
+    });
+
+    return nextKey;
+  } finally {
+    db.close();
+  }
 }
 
 async function clearRememberedPassword(clearInput = false) {
