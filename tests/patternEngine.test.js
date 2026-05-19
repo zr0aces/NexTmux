@@ -73,3 +73,19 @@ test("parseResetEpoch - unparseable returns null", () => {
   assert.equal(parseResetEpoch("soon", NOW), null);
   assert.equal(parseResetEpoch("unknown time", NOW), null);
 });
+
+test("parseResetEpoch - absolute with UTC offset timezone (UTC+5)", () => {
+  // "11:00 AM UTC+5" = 06:00 UTC; NOW is 18:00 UTC → wraps to next day
+  const d = new Date(NOW);
+  const todayAt11UTC = Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), 11, 0, 0, 0);
+  const expected = todayAt11UTC - (300) * 60000; // subtract UTC+5 offset (300 min) → -5 h → 06:00 UTC next day
+  assert.equal(parseResetEpoch("11:00 AM UTC+5", NOW), expected + 86400000);
+});
+
+test("parseResetEpoch - absolute with UTC offset timezone (UTC-8)", () => {
+  // "11:00 AM UTC-8" = 19:00 UTC; NOW is 18:00 UTC → same day
+  const d = new Date(NOW);
+  const todayAt11UTC = Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), 11, 0, 0, 0);
+  const expected = todayAt11UTC - (-480) * 60000; // subtract UTC-8 offset (-480 min) → +8 h → 19:00 UTC same day
+  assert.equal(parseResetEpoch("11:00 AM UTC-8", NOW), expected);
+});

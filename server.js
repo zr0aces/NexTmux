@@ -245,6 +245,7 @@ function resolveAutoModeResponse(detection) {
 
   if (hasRateLimitOptionOne || (/\/rate-limit-options/i.test(excerpt) && hasAnyOptionOne)) return "1";
   if (looksRateLimited) return null;
+  if (detection?.patternName === "press_enter") return "";
   return hasListYesOption ? "1" : "y";
 }
 
@@ -365,6 +366,7 @@ function initializeWorkerMonitorState(worker) {
   worker.autoMode = worker.autoMode !== undefined ? worker.autoMode : false;
   sessionStateManager.hydrateWorker(worker);
   if (worker.autoMode && worker.aiMonitorEnabled === false) worker.aiMonitorEnabled = true;
+  worker.aiState = worker.waitingState;
 }
 
 function getMonitorMeta(worker) {
@@ -531,11 +533,13 @@ function pollOutput(id) {
   if (w.aiState === "waiting" && w.resetAtEpochMs && now >= w.resetAtEpochMs) {
     sessionStateManager.clearResetEpoch(w);
     w.tokenResetAt = null;
-    w.aiState = "running";
-    sessionStateManager.setWaitingState(w, "running");
-    broadcast({ type: "aiState", id, state: "running" });
+    if (w.autoMode) {
+      w.aiState = "running";
+      sessionStateManager.setWaitingState(w, "running");
+      broadcast({ type: "aiState", id, state: "running" });
+      sendInput(id, "continue");
+    }
     broadcastMonitorMeta(id);
-    if (w.autoMode) sendInput(id, "continue");
     return;
   }
 
@@ -600,14 +604,13 @@ function pollOutput(id) {
     const responseKey = [
       inspect.detection.patternName || "",
       inspect.detection.matchedText || "",
-      inspect.detection.excerpt || "",
     ].join("::");
     if (!stateChanged && responseKey && w.lastAutoResponseKey === responseKey) {
       broadcastMonitorMeta(id);
       return;
     }
     const autoResponse = resolveAutoModeResponse(inspect.detection);
-    if (autoResponse) {
+    if (autoResponse !== null) {
       sendInput(id, autoResponse);
       w.lastAutoResponseKey = responseKey || String(now);
     }

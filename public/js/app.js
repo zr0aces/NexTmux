@@ -31,42 +31,54 @@ function openRememberDb() {
   });
 }
 
+let getRememberKeyPromise = null;
+
 async function getRememberKey(createIfMissing = true) {
-  if (!window.crypto || !window.crypto.subtle) return null;
-  let db;
+  if (getRememberKeyPromise) return getRememberKeyPromise;
+
+  getRememberKeyPromise = (async () => {
+    if (!window.crypto || !window.crypto.subtle) return null;
+    let db;
+    try {
+      db = await openRememberDb();
+    } catch {
+      return null;
+    }
+    try {
+      const existing = await new Promise((resolve, reject) => {
+        const tx = db.transaction(REMEMBER_PW_STORE, 'readonly');
+        const store = tx.objectStore(REMEMBER_PW_STORE);
+        const getReq = store.get(REMEMBER_PW_KEY_ID);
+        getReq.onsuccess = () => resolve(getReq.result || null);
+        getReq.onerror = () => reject(getReq.error || new Error('indexedDB_get_failed'));
+      });
+
+      if (existing || !createIfMissing) return existing;
+
+      const nextKey = await crypto.subtle.generateKey(
+        { name: 'AES-GCM', length: 256 },
+        false,
+        ['encrypt', 'decrypt'],
+      );
+
+      await new Promise((resolve, reject) => {
+        const tx = db.transaction(REMEMBER_PW_STORE, 'readwrite');
+        const store = tx.objectStore(REMEMBER_PW_STORE);
+        const putReq = store.put(nextKey, REMEMBER_PW_KEY_ID);
+        putReq.onsuccess = () => resolve();
+        putReq.onerror = () => reject(putReq.error || new Error('indexedDB_put_failed'));
+      });
+
+      return nextKey;
+    } finally {
+      db.close();
+    }
+  })();
+
   try {
-    db = await openRememberDb();
-  } catch {
-    return null;
-  }
-  try {
-    const existing = await new Promise((resolve, reject) => {
-      const tx = db.transaction(REMEMBER_PW_STORE, 'readonly');
-      const store = tx.objectStore(REMEMBER_PW_STORE);
-      const getReq = store.get(REMEMBER_PW_KEY_ID);
-      getReq.onsuccess = () => resolve(getReq.result || null);
-      getReq.onerror = () => reject(getReq.error || new Error('indexedDB_get_failed'));
-    });
-
-    if (existing || !createIfMissing) return existing;
-
-    const nextKey = await crypto.subtle.generateKey(
-      { name: 'AES-GCM', length: 256 },
-      false,
-      ['encrypt', 'decrypt'],
-    );
-
-    await new Promise((resolve, reject) => {
-      const tx = db.transaction(REMEMBER_PW_STORE, 'readwrite');
-      const store = tx.objectStore(REMEMBER_PW_STORE);
-      const putReq = store.put(nextKey, REMEMBER_PW_KEY_ID);
-      putReq.onsuccess = () => resolve();
-      putReq.onerror = () => reject(putReq.error || new Error('indexedDB_put_failed'));
-    });
-
-    return nextKey;
+    return await getRememberKeyPromise;
   } finally {
-    db.close();
+    getRememberKeyPromise = null;
   }
 }
 
@@ -137,6 +149,20 @@ async function initRememberedPassword() {
   const remember = document.getElementById('remember-pw');
   const clearBtn = document.getElementById('clear-saved-pw-btn');
   if (!pwInput || !remember || !clearBtn) return;
+
+  if (!window.isSecureContext || !window.crypto || !window.crypto.subtle) {
+    remember.disabled = true;
+    remember.parentElement.style.opacity = '0.5';
+    remember.parentElement.title = 'Remember Password requires HTTPS or localhost (Secure Context).';
+    const errEl = document.getElementById('login-err');
+    if (errEl) {
+      const warn = document.createElement('div');
+      warn.id = 'secure-context-warn';
+      warn.style.cssText = 'color:#d29922;font-size:11px;margin-top:8px;text-align:center';
+      warn.textContent = '⚠️ Remember Password disabled: Insecure Context (requires HTTPS/localhost)';
+      errEl.parentNode.insertBefore(warn, errEl);
+    }
+  }
 
   const saved = await loadRememberedPassword();
   if (saved) {
