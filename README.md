@@ -74,7 +74,7 @@ tmux kill-session -t term-1
 - **Automated AI State Detection** — Watches shell output to detect AI CLI status:
   - 🔵 Working → 🟢 Idle → 🟡 Waiting (Action Needed)
   - 🎛️ **Monitor Mode Selector** — Choose `Off`, `Monitor Only`, or `Auto Mode` per worker.
-  - ⚡ **Auto Mode** — Sends `y` (or `1` when prompts display `1. yes`).
+  - ⚡ **Auto Mode** — Sends `y` (or `1` when prompts display `1. yes`) and auto-selects `1. Stop and wait for limit to reset` for `/rate-limit-options`.
 - **Telegram & Discord Alerts** — Outbound webhook alerts when an AI CLI halts and requires human permission.
 - **Quick Controls** — Split/Tab layout toggles, favorites directory access, and an integrated virtual developer keyboard.
 

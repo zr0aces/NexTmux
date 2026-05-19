@@ -72,10 +72,10 @@ function ensureCard(id, cwd, status, logs, cmd, reason, monitorMeta) {
         '<div class="card-actions">' +
           '<span class="badge' + (status === 'stopped' ? ' stopped' : '') + (status === 'completed' ? ' completed' : '') + '" id="badge-' + id + '">' + status + '</span>' +
           '<div class="ai-monitor-wrap">' +
-          '<select class="monitor-mode-selector" id="monitor-mode-' + id + '" title="AI Monitor Mode">' +
-            '<option value="off">Off</option>' +
-            '<option value="monitor">Monitor Only</option>' +
-            '<option value="auto">Auto Mode</option>' +
+          '<select class="monitor-mode-selector" id="monitor-mode-' + id + '" title="AI Monitor: Off" aria-label="AI Monitor Mode">' +
+            '<option value="off">○</option>' +
+            '<option value="monitor">👁</option>' +
+            '<option value="auto">⚡</option>' +
           '</select>' +
           '<div class="ai-telemetry-tooltip" id="tooltip-' + id + '">' +
             '<div class="tooltip-title">🧠 AI Supervision</div>' +
@@ -391,11 +391,14 @@ function updateMonitorMeta(id, meta) {
     el.value = mode;
     el.className = 'monitor-mode-selector ' +
       (mode === 'auto' ? 'mode-auto' : (mode === 'monitor' ? 'mode-monitor' : 'mode-off'));
+    el.title = mode === 'auto'
+      ? 'AI Monitor: Auto Mode'
+      : (mode === 'monitor' ? 'AI Monitor: Monitor Only' : 'AI Monitor: Off');
   });
   document.querySelectorAll('#meta-mode-' + id).forEach(el => {
     const label = mode === 'auto'
-      ? 'Auto Mode (auto-respond yes / 1)'
-      : (mode === 'monitor' ? 'Monitor Only' : 'Off');
+      ? '⚡ Auto'
+      : (mode === 'monitor' ? '👁 Monitor' : '○ Off');
     el.textContent = 'Mode: ' + label;
   });
 }
