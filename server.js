@@ -48,6 +48,8 @@ const issueAlertTime = new Map(); // key: alert key, value: timestamp
 const ISSUE_ALERT_COOLDOWN_MS = 120000; // 120s cooldown per issue key
 const LOGIN_WINDOW_MS = 10 * 60 * 1000;
 const MAX_LOGIN_ATTEMPTS = 20;
+const TRUST_PROXY = process.env.TRUST_PROXY === "1";
+const SESSION_TTL_MS = Math.max(60000, Number(process.env.SESSION_TTL_MS) || 7 * 24 * 60 * 60 * 1000);
 const loginAttempts = new Map();
 const RATE_LIMIT_PATTERNS = new Set(["token_limit", "usage_limit", "rate_limited", "rate_limit_options"]);
 
@@ -57,8 +59,29 @@ function createToken() {
 
 function getClientIp(req) {
   const forwarded = req.headers["x-forwarded-for"];
-  if (typeof forwarded === "string" && forwarded.trim()) return forwarded.split(",")[0].trim();
+  if (TRUST_PROXY && typeof forwarded === "string" && forwarded.trim()) return forwarded.split(",")[0].trim();
   return req.socket?.remoteAddress || "unknown";
+}
+
+function timingSafePasswordMatch(candidate) {
+  const expected = Buffer.from(String(PASSWORD || ""), "utf8");
+  const provided = Buffer.from(String(candidate || ""), "utf8");
+  if (provided.length !== expected.length) return false;
+  return crypto.timingSafeEqual(provided, expected);
+}
+
+function trimSessions(now = Date.now()) {
+  for (const [token, meta] of sessions) {
+    if (!meta || typeof meta.expiresAt !== "number" || now > meta.expiresAt) {
+      sessions.delete(token);
+    }
+  }
+}
+
+function createSession() {
+  const token = createToken();
+  sessions.set(token, { expiresAt: Date.now() + SESSION_TTL_MS });
+  return token;
 }
 
 function trimLoginAttempts(now = Date.now()) {
@@ -115,11 +138,6 @@ function isAlive(sessionName) {
   } catch (e) {
     return false;
   }
-}
-
-function tmux(cmd) {
-  try { return execSync("tmux " + cmd, { encoding: "utf8", stdio: "pipe" }); }
-  catch (e) { return ""; }
 }
 
 // Safe alternative: spawn tmux with explicit arg array — no shell interpretation.
@@ -674,9 +692,14 @@ function json(res, code, obj) {
 }
 
 function auth(req) {
+  trimSessions();
   const cookie = req.headers.cookie || "";
   const token = cookie.split(";").map(s => s.trim()).find(s => s.startsWith("token="))?.slice(6);
-  return token && sessions.has(token);
+  if (!token) return false;
+  const meta = sessions.get(token);
+  if (!meta) return false;
+  meta.expiresAt = Date.now() + SESSION_TTL_MS;
+  return true;
 }
 
 const server = http.createServer(async (req, res) => {
@@ -692,9 +715,8 @@ const server = http.createServer(async (req, res) => {
     if (isLoginRateLimited(req)) return json(res, 429, { ok: false, error: "too_many_attempts" });
     const { ok, body } = await parseBody(req);
     if (!ok || !body) return json(res, 400, { error: "invalid request body" });
-    if (body.pw === PASSWORD) {
-      const token = createToken();
-      sessions.set(token, true);
+    if (timingSafePasswordMatch(body.pw)) {
+      const token = createSession();
       clearFailedLogin(req);
       res.writeHead(200, { "Set-Cookie": buildAuthCookie(req, token), "Content-Type": "application/json" });
       return res.end(JSON.stringify({ ok: true }));
@@ -723,8 +745,27 @@ const server = http.createServer(async (req, res) => {
   if (method === "GET" && url === "/api/config") {
     if (!auth(req)) return json(res, 401, { error: "unauthorized" });
     const configPath = path.join(__dirname, "config.json");
-    const config = fs.existsSync(configPath) ? JSON.parse(fs.readFileSync(configPath, "utf8")) : {};
-    return json(res, 200, config);
+    let config = {};
+    if (fs.existsSync(configPath)) {
+      try {
+        config = JSON.parse(fs.readFileSync(configPath, "utf8"));
+      } catch {
+        config = {};
+      }
+    }
+    const safeConfig = {
+      basePath: config.basePath,
+      favorites: Array.isArray(config.favorites) ? config.favorites : [],
+      defaultCommand: typeof config.defaultCommand === "string" ? config.defaultCommand : undefined,
+      aiMonitor: config.aiMonitor && typeof config.aiMonitor === "object" ? {
+        enabled: config.aiMonitor.enabled !== false,
+        pollIntervalMs: config.aiMonitor.pollIntervalMs,
+        idleThresholdMs: config.aiMonitor.idleThresholdMs,
+        linesToInspect: config.aiMonitor.linesToInspect,
+        notifyCooldownMs: config.aiMonitor.notifyCooldownMs,
+      } : undefined,
+    };
+    return json(res, 200, safeConfig);
   }
 
   if (!auth(req)) return json(res, 401, { error: "unauthorized" });
@@ -745,7 +786,7 @@ const server = http.createServer(async (req, res) => {
   }
 
   if (method === "GET" && url === "/api/scan") {
-    const raw = tmux("ls -F '#{session_name}|#{pane_current_path}'");
+    const raw = tmuxExec("ls", "-F", "#{session_name}|#{pane_current_path}");
     const existingNames = new Set([...workers.values()].map(w => w.sessionName));
     const found = [];
     for (const line of raw.trim().split("\n")) {
@@ -1027,7 +1068,7 @@ wss.on('connection', (ws, req) => {
 
 
 function recoverSessions() {
-  const raw = tmux("ls -F '#{session_name}|#{pane_current_path}|#{pane_current_command}'");
+  const raw = tmuxExec("ls", "-F", "#{session_name}|#{pane_current_path}|#{pane_current_command}");
   if (!raw.trim()) return;
   for (const line of raw.trim().split("\n")) {
     if (!line) continue;
@@ -1231,7 +1272,7 @@ function checkTunnel() {
 server.listen(PORT, () => {
   recoverSessions();
   console.log(`✅ TmuxHub running → http://localhost:${PORT}`);
-  console.log(`🔑 Password: ${PASSWORD}`);
+  console.log("🔑 Password is configured via DASHBOARD_PASSWORD");
   console.log(`📺 View tmux session: tmux attach -t term-1`);
   console.log(`👀 AI monitor: ${monitorConfig.enabled ? "enabled" : "disabled"} (poll=${monitorConfig.pollIntervalMs}ms, lines=${monitorConfig.linesToInspect})`);
   console.log(`📨 Telegram alerts: ${telegramService.enabled ? "configured" : "not configured"}`);

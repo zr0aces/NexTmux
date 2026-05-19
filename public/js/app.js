@@ -79,12 +79,9 @@ async function saveRememberedPassword(plainPassword) {
   const clearBtn = document.getElementById('clear-saved-pw-btn');
   if (clearBtn) clearBtn.style.display = '';
 
-  // Fallback if Web Crypto is unavailable (e.g. non-secure HTTP contexts)
+  // Only store remembered passwords when WebCrypto is available.
   if (!window.crypto || !window.crypto.subtle) {
-    localStorage.setItem(REMEMBER_PW_KEY, JSON.stringify({
-      fallback: true,
-      data: btoa(encodeURIComponent(plainPassword))
-    }));
+    clearRememberedPassword(false);
     return;
   }
 
@@ -99,11 +96,7 @@ async function saveRememberedPassword(plainPassword) {
       data: toB64(new Uint8Array(cipher)),
     }));
   } catch {
-    // Graceful fallback to obfuscated storage if crypto errors out
-    localStorage.setItem(REMEMBER_PW_KEY, JSON.stringify({
-      fallback: true,
-      data: btoa(encodeURIComponent(plainPassword))
-    }));
+    clearRememberedPassword(false);
   }
 }
 
@@ -114,11 +107,6 @@ async function loadRememberedPassword() {
   try {
     const parsed = JSON.parse(payload);
     if (!parsed) return null;
-    
-    // Decrypt fallback structure
-    if (parsed.fallback) {
-      return decodeURIComponent(atob(parsed.data));
-    }
 
     if (!parsed.iv || !parsed.data) return null;
     
