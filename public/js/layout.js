@@ -3,9 +3,34 @@
 let layout = localStorage.getItem('layout') || 'tab';
 let activeTab = null;
 
+function syncCardPlacement() {
+  const tabContent = document.getElementById('tab-content');
+  const splitContent = document.getElementById('split-content');
+  const panels = Array.from(document.querySelectorAll('.tab-panel'));
+  
+  if (layout === 'tab') {
+    panels.forEach(p => {
+      if (p.parentElement !== tabContent) {
+        tabContent.appendChild(p);
+      }
+    });
+  } else if (layout === 'split') {
+    const tabOrder = Array.from(document.querySelectorAll('.tab')).map(t => t.dataset.id);
+    tabOrder.forEach(id => {
+      const p = panels.find(panel => panel.dataset.id === id);
+      if (p && p.parentElement !== splitContent) {
+        splitContent.appendChild(p);
+      }
+    });
+  }
+}
+
 function setLayout(mode) {
   layout = mode;
   localStorage.setItem('layout', mode);
+  
+  syncCardPlacement();
+
   document.getElementById('tab-mode').style.display = mode === 'tab' ? 'flex' : 'none';
   document.getElementById('split-mode').style.display = mode === 'split' ? 'block' : 'none';
   document.getElementById('split-content').style.display = mode === 'split' ? 'grid' : 'none';
@@ -17,8 +42,8 @@ function setLayout(mode) {
 
 function updateSplitGrid() {
   const sc = document.getElementById('split-content');
-  const cards = sc.querySelectorAll('.card');
-  const n = cards.length;
+  const panels = sc.querySelectorAll('.tab-panel');
+  const n = panels.length;
   if (n === 0) return;
 
   let cols, rows;
@@ -31,6 +56,7 @@ function updateSplitGrid() {
   sc.style.gridTemplateColumns = `repeat(${cols}, 1fr)`;
   sc.style.gridTemplateRows = `repeat(${rows}, 1fr)`;
 }
+
 
 function selectTab(id) {
   activeTab = id;

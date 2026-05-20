@@ -41,11 +41,10 @@ function renderTitle(id, cwd, cmd) {
   } else {
     text = '#' + id + ' ' + tabCmd + ' · ' + folder;
   }
-  ['tab-label-' + id, 'card-title-' + id].forEach(function(elId) {
-    document.querySelectorAll('#' + elId).forEach(function(el) {
-      el.textContent = text;
-    });
-  });
+  const elLabel = document.getElementById('tab-label-' + id);
+  if (elLabel) elLabel.textContent = text;
+  const elTitle = document.getElementById('card-title-' + id);
+  if (elTitle) elTitle.textContent = text;
 }
 
 function killBtnHtml(id, status) {
@@ -59,7 +58,6 @@ function ensureCard(id, cwd, status, logs, cmd, reason, monitorMeta) {
   if (document.getElementById('card-' + id)) return;
 
   const cmdLabel = cmd || 'claude';
-  const folderLabel = cwd.replace(/\/$/, '').split('/').pop() || cwd;
   const card = document.createElement('div');
   card.className = 'card';
   card.id = 'card-' + id;
@@ -118,12 +116,13 @@ function ensureCard(id, cwd, status, logs, cmd, reason, monitorMeta) {
   const panel = document.createElement('div');
   panel.className = 'tab-panel';
   panel.dataset.id = id;
-  panel.appendChild(card.cloneNode(true));
-  document.getElementById('tab-content').appendChild(panel);
+  panel.appendChild(card);
 
-  const splitCard = card;
-  document.getElementById('split-content').appendChild(splitCard);
-  updateSplitGrid();
+  panel.addEventListener('mousedown', () => {
+    if (layout === 'split' && activeTab !== id) {
+      selectTab(id);
+    }
+  });
 
   const tab = document.createElement('div');
   tab.className = 'tab';
@@ -150,16 +149,22 @@ function ensureCard(id, cwd, status, logs, cmd, reason, monitorMeta) {
   bindTabDrag(tab);
   document.getElementById('tab-bar').appendChild(tab);
 
+  bindCard(id, panel);
+
+  if (layout === 'tab') {
+    document.getElementById('tab-content').appendChild(panel);
+  } else {
+    document.getElementById('split-content').appendChild(panel);
+  }
+  updateSplitGrid();
+
   selectTab(id);
 
-  bindCard(id, panel);
-  bindCard(id, splitCard);
-
   if (status === 'stopped') {
-    document.querySelectorAll('#kill-' + id).forEach(btn => {
-      btn.onclick = () => removeWorker(id);
-    });
-    document.querySelectorAll('#input-row-' + id).forEach(el => el.style.display = 'none');
+    const btn = document.getElementById('kill-' + id);
+    if (btn) btn.onclick = () => removeWorker(id);
+    const el = document.getElementById('input-row-' + id);
+    if (el) el.style.display = 'none';
   }
 
   renderTitle(id, cwd, cmdLabel);
@@ -185,8 +190,6 @@ function bindCard(id, root) {
   if (sendBtn) sendBtn.addEventListener('click', () => sendInput(id));
   if (monitorModeSelector) monitorModeSelector.addEventListener('change', (e) => setMonitorMode(id, e.target.value));
   if (inp) {
-    // Workaround for Chrome IME bug: pressing Enter during CJK composition duplicates the last character.
-    // While composing, pass Enter through to the IME; send the input only on compositionend.
     let pendingEnter = false;
     inp.addEventListener('compositionend', () => {
       if (pendingEnter) {
@@ -210,7 +213,6 @@ function bindCard(id, root) {
     });
   }
 
-  // Toolkit toggle
   const tkBtn = q('#tk-btn-' + id);
   const tkPopup = q('#tk-popup-' + id);
   if (tkBtn && tkPopup) {
@@ -227,7 +229,6 @@ function bindCard(id, root) {
     });
   }
 
-  // Key buttons
   const keyMap = {
     up: 'Up', down: 'Down', enter: 'Enter', esc: 'Escape',
     tab: 'Tab', stab: 'BTab', ctrlc: 'C-c'
@@ -255,18 +256,20 @@ function isNearBottom(box) {
 }
 
 function appendLog(id, src, text) {
-  document.querySelectorAll('#logs-' + id).forEach(box => {
+  const box = document.getElementById('logs-' + id);
+  if (box) {
     var wasAtBottom = isNearBottom(box);
     const line = document.createElement('div');
     line.className = 'log-line ' + src;
     line.innerHTML = (typeof ansiToHtml === 'function') ? ansiToHtml(text) : text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
     box.appendChild(line);
     if (wasAtBottom) box.scrollTop = box.scrollHeight;
-  });
+  }
 }
 
 function updateExitReason(id, reason) {
-  document.querySelectorAll('#exit-reason-' + id).forEach(el => {
+  const el = document.getElementById('exit-reason-' + id);
+  if (el) {
     if (reason) {
       el.textContent = 'Exit reason: ' + reason;
       el.style.display = 'block';
@@ -274,27 +277,29 @@ function updateExitReason(id, reason) {
       el.textContent = '';
       el.style.display = 'none';
     }
-  });
+  }
 }
 
 function updateStatus(id, status, reason) {
   var isStopped = status === 'stopped' || status === 'completed';
-  document.querySelectorAll('#badge-' + id).forEach(el => {
-    el.textContent = status;
-    el.className = 'badge' + (status === 'stopped' ? ' stopped' : '') + (status === 'completed' ? ' completed' : '');
-  });
-  document.querySelectorAll('#tab-dot-' + id).forEach(el => {
-    el.className = 'tab-dot' + (status === 'stopped' ? ' stopped' : '') + (status === 'completed' ? ' completed' : '');
-  });
+  const elBadge = document.getElementById('badge-' + id);
+  if (elBadge) {
+    elBadge.textContent = status;
+    elBadge.className = 'badge' + (status === 'stopped' ? ' stopped' : '') + (status === 'completed' ? ' completed' : '');
+  }
+  const elTabDot = document.getElementById('tab-dot-' + id);
+  if (elTabDot) {
+    elTabDot.className = 'tab-dot' + (status === 'stopped' ? ' stopped' : '') + (status === 'completed' ? ' completed' : '');
+  }
   if (isStopped) {
     updateExitReason(id, reason || 'Unknown');
-    document.querySelectorAll('#kill-' + id).forEach(btn => {
+    const btn = document.getElementById('kill-' + id);
+    if (btn) {
       btn.textContent = 'Remove';
       btn.style.background = '#21262d';
       btn.style.borderColor = '#f85149';
       btn.style.color = '#f85149';
       btn.onclick = () => removeWorker(id);
-      // Add Reconnect button if not already present
       if (!btn.parentElement.querySelector('.reconnect-btn')) {
         var reconBtn = document.createElement('button');
         reconBtn.className = 'reconnect-btn';
@@ -303,12 +308,14 @@ function updateStatus(id, status, reason) {
         reconBtn.onclick = function() { reconnectWorker(id); };
         btn.parentElement.insertBefore(reconBtn, btn);
       }
-    });
-    document.querySelectorAll('#input-row-' + id).forEach(el => el.style.display = 'none');
+    }
+    const elInputRow = document.getElementById('input-row-' + id);
+    if (elInputRow) elInputRow.style.display = 'none';
   }
   if (status === 'running') {
     updateExitReason(id, null);
-    document.querySelectorAll('#kill-' + id).forEach(btn => {
+    const btn = document.getElementById('kill-' + id);
+    if (btn) {
       btn.textContent = 'Stop';
       btn.style.background = '';
       btn.style.borderColor = '';
@@ -316,34 +323,35 @@ function updateStatus(id, status, reason) {
       btn.onclick = () => killWorker(id);
       var reconBtn = btn.parentElement.querySelector('.reconnect-btn');
       if (reconBtn) reconBtn.remove();
-    });
-    document.querySelectorAll('#input-row-' + id).forEach(el => el.style.display = '');
+    }
+    const elInputRow = document.getElementById('input-row-' + id);
+    if (elInputRow) elInputRow.style.display = '';
   }
 }
 
 function updateAIState(id, state) {
-  // Skip if worker is stopped/completed
-  var badge = document.querySelector('#badge-' + id);
+  var badge = document.getElementById('badge-' + id);
   if (badge && (badge.classList.contains('stopped') || badge.classList.contains('completed'))) return;
 
-  document.querySelectorAll('#tab-dot-' + id).forEach(function(el) {
-    el.classList.remove('ai-idle', 'ai-waiting');
-    if (state === 'idle') el.classList.add('ai-idle');
-    else if (state === 'waiting') el.classList.add('ai-waiting');
-  });
+  const elTabDot = document.getElementById('tab-dot-' + id);
+  if (elTabDot) {
+    elTabDot.classList.remove('ai-idle', 'ai-waiting');
+    if (state === 'idle') elTabDot.classList.add('ai-idle');
+    else if (state === 'waiting') elTabDot.classList.add('ai-waiting');
+  }
 
-  document.querySelectorAll('#badge-' + id).forEach(function(el) {
-    el.classList.remove('ai-idle', 'ai-waiting');
+  if (badge) {
+    badge.classList.remove('ai-idle', 'ai-waiting');
     if (state === 'idle') {
-      el.classList.add('ai-idle');
-      el.textContent = 'idle';
+      badge.classList.add('ai-idle');
+      badge.textContent = 'idle';
     } else if (state === 'waiting') {
-      el.classList.add('ai-waiting');
-      el.textContent = 'waiting';
+      badge.classList.add('ai-waiting');
+      badge.textContent = 'waiting';
     } else {
-      el.textContent = 'running';
+      badge.textContent = 'running';
     }
-  });
+  }
 }
 
 function formatMetaTime(iso) {
@@ -366,42 +374,49 @@ function updateMonitorMeta(id, meta) {
   const status = meta.notificationStatus || '-';
   const notifyAt = formatMetaTime(meta.lastNotificationAt);
 
-  document.querySelectorAll('#meta-activity-' + id).forEach(el => {
-    el.textContent = 'Activity: ' + activity;
-  });
-  document.querySelectorAll('#meta-pattern-' + id).forEach(el => {
+  const elActivity = document.getElementById('meta-activity-' + id);
+  if (elActivity) elActivity.textContent = 'Activity: ' + activity;
+  
+  const elPattern = document.getElementById('meta-pattern-' + id);
+  if (elPattern) {
     const pattern = meta.lastMatchedPattern ? '[' + meta.lastMatchedPattern + '] ' : '';
-    el.textContent = 'Prompt: ' + pattern + prompt;
-    el.title = meta.lastPromptExcerpt || '';
-  });
-  document.querySelectorAll('#meta-notify-' + id).forEach(el => {
-    el.textContent = 'Notify: ' + status + (notifyAt !== '-' ? ' @ ' + notifyAt : '');
-  });
-  document.querySelectorAll('#meta-reset-' + id).forEach(el => {
+    elPattern.textContent = 'Prompt: ' + pattern + prompt;
+    elPattern.title = meta.lastPromptExcerpt || '';
+  }
+  
+  const elNotify = document.getElementById('meta-notify-' + id);
+  if (elNotify) elNotify.textContent = 'Notify: ' + status + (notifyAt !== '-' ? ' @ ' + notifyAt : '');
+  
+  const elReset = document.getElementById('meta-reset-' + id);
+  if (elReset) {
     if (meta.tokenResetAt) {
       const armed = meta.resetAtEpochMs != null;
-      el.textContent = '⏱ Reset in: ' + meta.tokenResetAt + (armed ? '  [armed]' : '');
-      el.style.display = '';
-      el.style.color = armed ? '#58a6ff' : '#d29922';
+      elReset.textContent = '⏱ Reset in: ' + meta.tokenResetAt + (armed ? '  [armed]' : '');
+      elReset.style.display = '';
+      elReset.style.color = armed ? '#58a6ff' : '#d29922';
     } else {
-      el.style.display = 'none';
+      elReset.style.display = 'none';
     }
-  });
+  }
+  
   const mode = meta.monitorMode || (meta.aiMonitorEnabled === false ? 'off' : (meta.autoMode === true ? 'auto' : 'monitor'));
-  document.querySelectorAll('#monitor-mode-' + id).forEach(el => {
-    el.value = mode;
-    el.className = 'monitor-mode-selector ' +
+  const elMonitorMode = document.getElementById('monitor-mode-' + id);
+  if (elMonitorMode) {
+    elMonitorMode.value = mode;
+    elMonitorMode.className = 'monitor-mode-selector ' +
       (mode === 'auto' ? 'mode-auto' : (mode === 'monitor' ? 'mode-monitor' : 'mode-off'));
-    el.title = mode === 'auto'
+    elMonitorMode.title = mode === 'auto'
       ? 'AI Monitor: Auto Mode'
       : (mode === 'monitor' ? 'AI Monitor: Monitor Only' : 'AI Monitor: Off');
-  });
-  document.querySelectorAll('#meta-mode-' + id).forEach(el => {
+  }
+  
+  const elMetaMode = document.getElementById('meta-mode-' + id);
+  if (elMetaMode) {
     const label = mode === 'auto'
       ? '⚡ Auto'
       : (mode === 'monitor' ? '👁 Monitor' : '○ Off');
-    el.textContent = 'Mode: ' + label;
-  });
+    elMetaMode.textContent = 'Mode: ' + label;
+  }
 }
 
 function removeWorker(id) {
@@ -427,13 +442,11 @@ function removeWorker(id) {
 }
 
 function updateCwd(id, cwd) {
-  document.querySelectorAll('#card-' + id + ' .card-cwd').forEach(el => {
+  const el = document.getElementById('card-cwd-' + id);
+  if (el) {
     el.textContent = displayPath(cwd);
-  });
-  // Also update card inside tab-panel
-  document.querySelectorAll('.tab-panel[data-id="' + id + '"] .card-cwd').forEach(el => {
-    el.textContent = displayPath(cwd);
-  });
+    el.title = cwd;
+  }
   const tab = document.querySelector('.tab[data-id="' + id + '"]');
   if (tab) tab.dataset.cwd = cwd;
   renderTitle(id, cwd);
@@ -447,21 +460,20 @@ function reconnectWorker(id) {
     });
 }
 
-// ── Worker Actions ──
-
 function sendSpecialKey(id, key) {
   notifyActive();
   apiPost('/api/key', { id, key });
 }
 
 function sendInput(id) {
-  let text = '';
-  const inps = document.querySelectorAll('#inp-' + id);
-  inps.forEach(inp => { if (!text && inp.value.trim()) text = inp.value.trim(); });
+  const inp = document.getElementById('inp-' + id);
+  if (!inp) return;
+  let text = inp.value.trim();
   if (!text) return;
   text = text.split('\n').filter(l => l.trim() !== '').join('\n');
   if (!text) return;
-  inps.forEach(inp => { inp.value = ''; inp.style.height = 'auto'; });
+  inp.value = '';
+  inp.style.height = 'auto';
   notifyActive();
   apiPost('/api/input', { id, text });
 }

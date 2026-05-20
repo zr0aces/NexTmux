@@ -27,7 +27,8 @@ function handleMsg(d) {
   if (d.type === 'preview_prompt') showPreviewPrompt(d.workerId, d.port, d.contentType);
   if (d.type === 'preview_tunnel') updatePreviewTunnel(d.port, d.url);
   if (d.type === 'snapshot') {
-    document.querySelectorAll('#logs-' + d.id).forEach(box => {
+    const box = document.getElementById('logs-' + d.id);
+    if (box) {
       var wasAtBottom = isNearBottom(box);
       box.innerHTML = '';
       d.lines.forEach(text => {
@@ -37,7 +38,7 @@ function handleMsg(d) {
         box.appendChild(line);
       });
       if (wasAtBottom) box.scrollTop = box.scrollHeight;
-    });
+    }
   }
 }
 

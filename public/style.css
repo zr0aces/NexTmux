@@ -1861,3 +1861,16 @@ header h1 {
     font-size: 11px;
   }
 }
+
+/* Split mode display override for tab-panel elements inside split-content */
+#split-content .tab-panel {
+  display: flex !important;
+  min-height: 0;
+  min-width: 0;
+}
+
+/* Active split panel highlight styling */
+#split-content .tab-panel.active .card {
+  border-color: var(--accent-primary);
+  box-shadow: 0 0 12px rgba(59, 130, 246, 0.35);
+}
