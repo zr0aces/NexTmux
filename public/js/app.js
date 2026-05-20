@@ -36,14 +36,13 @@ document.getElementById('spawn-btn').addEventListener('click', () => {
 document.getElementById('scan-btn').addEventListener('click', scanSessions);
 document.getElementById('add-fav-btn').addEventListener('click', addFavorite);
 
-document.getElementById('session-select').addEventListener('change', (e) => selectSession(e.target.value));
-document.getElementById('session-add-btn').addEventListener('click', createSession);
-document.getElementById('session-rename-btn').addEventListener('click', renameSession);
-document.getElementById('session-close-btn').addEventListener('click', closeSession);
-document.getElementById('tab-add-btn').addEventListener('click', createTab);
-document.getElementById('tab-close-btn').addEventListener('click', () => closeTab());
-document.getElementById('pane-split-h-btn').addEventListener('click', () => splitPane('hsplit'));
-document.getElementById('pane-split-v-btn').addEventListener('click', () => splitPane('vsplit'));
+// Layout mode buttons (single / vsplit / hsplit)
+document.querySelectorAll('.layout-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const mode = btn.dataset.layout || 'single';
+    if (typeof setLayoutMode === 'function') setLayoutMode(mode);
+  });
+});
 
 document.addEventListener('click', e => {
   closeDropdown();
@@ -63,12 +62,13 @@ document.addEventListener('keydown', e => {
 
   if (ctrlShift && e.key.toLowerCase() === 't') {
     e.preventDefault();
-    createTab();
+    // Open spawn toolbar to create a new session.
+    toggleToolbar();
     return;
   }
   if (ctrlShift && e.key.toLowerCase() === 'w') {
     e.preventDefault();
-    closeTab();
+    if (typeof activePaneId !== 'undefined' && activePaneId) closePane(activePaneId);
     return;
   }
   if (ctrlShift && e.key === '[') {
@@ -83,17 +83,17 @@ document.addEventListener('keydown', e => {
   }
   if (ctrlShift && e.key === '\\') {
     e.preventDefault();
-    splitPane('hsplit');
+    if (typeof setLayoutMode === 'function') setLayoutMode('vsplit');
     return;
   }
   if (ctrlShift && e.key === '-') {
     e.preventDefault();
-    splitPane('vsplit');
+    if (typeof setLayoutMode === 'function') setLayoutMode('hsplit');
     return;
   }
   if (ctrlShift && e.key.toLowerCase() === 'n') {
     e.preventDefault();
-    createSession();
+    toggleToolbar();
     return;
   }
   if (e.ctrlKey && !e.shiftKey && !e.metaKey && !e.altKey && /^[1-9]$/.test(e.key)) {

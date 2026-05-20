@@ -1,23 +1,21 @@
-function normalizeLayout(tab) {
-  const layout = tab?.layout || 'single';
-  if (!['single', 'hsplit', 'vsplit', 'quad'].includes(layout)) return 'single';
-  return layout;
+function normalizeLayout(mode) {
+  return ['single', 'hsplit', 'vsplit', 'quad'].includes(mode) ? mode : 'single';
 }
 
 function applyPaneLayout() {
   const root = document.getElementById('tab-content');
-  const tab = getActiveTab();
-  if (!root || !tab) return;
+  if (!root) return;
   const count = root.querySelectorAll('.pane-card').length;
-  const layout = normalizeLayout(tab);
+  const mode = (typeof layoutMode !== 'undefined') ? layoutMode : 'single';
   root.classList.remove('layout-single', 'layout-hsplit', 'layout-vsplit', 'layout-quad');
-  root.classList.add('layout-' + layout);
+  root.classList.add('layout-' + normalizeLayout(mode));
   root.dataset.count = String(count);
 }
 
+// setLayout is called by keyboard shortcuts and was previously backend-coupled.
+// Now it simply delegates to the client-side layout mode.
 function setLayout(mode) {
-  const mapped = mode === 'split' ? 'vsplit' : 'single';
-  setActiveTabLayout(mapped);
+  if (typeof setLayoutMode === 'function') setLayoutMode(normalizeLayout(mode));
 }
 
 function updateSplitGrid() {

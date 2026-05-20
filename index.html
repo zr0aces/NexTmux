@@ -57,16 +57,11 @@
     </div>
 
     <div class="workspace-controls">
-      <select id="session-select" class="header-select"></select>
-      <button id="session-add-btn" class="header-btn" title="New Session">+S</button>
-      <button id="session-rename-btn" class="header-btn" title="Rename Session">S✎</button>
-      <button id="session-close-btn" class="header-btn" title="Close Session">S✕</button>
-      <button id="tab-add-btn" class="header-btn" title="New Tab">+T</button>
-      <button id="tab-close-btn" class="header-btn" title="Close Tab">T✕</button>
-      <button id="pane-split-h-btn" class="header-btn" title="Horizontal Split">⇅</button>
-      <button id="pane-split-v-btn" class="header-btn" title="Vertical Split">⇄</button>
-      <button id="scan-btn" class="header-btn">🔍</button>
-      <button id="toggle-toolbar-btn" class="header-btn accent">+</button>
+      <button class="header-btn layout-btn layout-active" data-layout="single" title="Single session">▣</button>
+      <button class="header-btn layout-btn" data-layout="vsplit" title="Side by side (Ctrl+Shift+\\)">⬕</button>
+      <button class="header-btn layout-btn" data-layout="hsplit" title="Top / bottom (Ctrl+Shift+-)">⬓</button>
+      <button id="scan-btn" class="header-btn" title="Scan for existing tmux sessions">🔍</button>
+      <button id="toggle-toolbar-btn" class="header-btn accent" title="New session (Ctrl+Shift+T)">+</button>
     </div>
   </header>
 
@@ -83,7 +78,7 @@
       </div>
     </div>
     <button id="dir-btn">📁</button>
-    <button id="spawn-btn" class="primary">+ New Pane</button>
+    <button id="spawn-btn" class="primary">+ New Session</button>
   </div>
 
   <div id="workspace" style="flex:1;display:flex;flex-direction:column;overflow:hidden">

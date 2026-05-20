@@ -190,6 +190,22 @@ header h1 {
   font-weight: 600;
 }
 
+/* Layout-mode toggle buttons (▣ ⬕ ⬓) */
+.layout-btn {
+  font-size: 14px;
+  padding: 0 9px;
+}
+
+.layout-btn.layout-active {
+  background: rgba(59, 130, 246, 0.15);
+  border-color: rgba(59, 130, 246, 0.4);
+  color: var(--accent-hover);
+}
+
+.layout-btn.layout-active:hover {
+  background: rgba(59, 130, 246, 0.22);
+}
+
 /* ── Toolbar ───────────────────────────────────────── */
 
 .toolbar {
@@ -1894,17 +1910,136 @@ header h1 {
 
 #workspace {
   min-height: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
+
+/* ── Session Tab Bar ────────────────────────────────── */
+/* Each browser tab = one tmux session (1:1 mapping).    */
 
 #tab-bar {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 8px 12px;
+  gap: 4px;
+  padding: 6px 12px;
   border-bottom: 1px solid var(--border-color);
   overflow-x: auto;
+  flex-shrink: 0;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255,255,255,0.08) transparent;
 }
 
+#tab-bar::-webkit-scrollbar { height: 4px; }
+#tab-bar::-webkit-scrollbar-track { background: transparent; }
+#tab-bar::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.08); border-radius: 2px; }
+
+.session-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px 5px 8px;
+  border-radius: 7px;
+  cursor: pointer;
+  border: 1px solid var(--border-color);
+  background: rgba(255,255,255,0.03);
+  user-select: none;
+  white-space: nowrap;
+  flex-shrink: 0;
+  transition: all 0.15s ease;
+  max-width: 200px;
+}
+
+.session-tab:hover {
+  background: rgba(255,255,255,0.06);
+  border-color: var(--border-hover);
+}
+
+.session-tab.active {
+  border-color: rgba(59,130,246,0.55);
+  background: rgba(59,130,246,0.08);
+}
+
+.session-tab-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.session-dot-running { background: #3fb950; box-shadow: 0 0 4px rgba(63,185,80,0.6); }
+.session-dot-idle    { background: #d29922; }
+.session-dot-waiting { background: #f0883e; box-shadow: 0 0 4px rgba(240,136,62,0.6); }
+.session-dot-error,
+.session-dot-stopped { background: #6e7681; }
+
+.session-tab-label {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+  min-width: 0;
+}
+
+.session-tab.active .session-tab-label {
+  color: var(--text-primary);
+}
+
+.session-tab-close {
+  flex-shrink: 0;
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-size: 10px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0 2px;
+  border-radius: 3px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: opacity 0.15s, background 0.15s;
+}
+
+.session-tab:hover .session-tab-close,
+.session-tab.active .session-tab-close {
+  opacity: 1;
+}
+
+.session-tab-close:hover {
+  background: rgba(239,68,68,0.2);
+  color: var(--accent-danger);
+}
+
+.session-tab-add {
+  flex-shrink: 0;
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
+  border: 1px dashed var(--border-color);
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s;
+}
+
+.session-tab-add:hover {
+  border-color: var(--accent-success);
+  color: var(--accent-success);
+  background: rgba(16,185,129,0.06);
+}
+
+/* Keep old .tab styles for any remaining references */
 .tab {
   display: inline-flex;
   align-items: center;
@@ -1930,6 +2065,19 @@ header h1 {
   width: 28px;
   height: 28px;
   cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* ── Pane Workspace ─────────────────────────────────── */
+
+#tab-content {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
 }
 
 .pane-workspace {
@@ -1938,6 +2086,7 @@ header h1 {
   display: grid;
   gap: 8px;
   padding: 8px;
+  height: 100%;
 }
 
 .pane-workspace.layout-single,

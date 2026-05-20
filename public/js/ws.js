@@ -71,10 +71,12 @@ function sendResize() {
   const innerH = Math.max(0, box.clientHeight - padY);
   const cols = Math.max(8, Math.floor(innerW / ch.w));
   const rows = Math.max(4, Math.floor(innerH / ch.h));
-  const activeTab = getActiveTab();
-  const paneIds = (activeTab?.paneIds || []);
-  if (!paneIds.length) return;
-  paneIds.forEach(id => {
+  // Resize all currently visible panes.
+  const ids = (typeof getVisiblePaneIds === 'function')
+    ? getVisiblePaneIds()
+    : (getActiveTab()?.paneIds || []);
+  if (!ids.length) return;
+  ids.forEach(id => {
     ws.send(JSON.stringify({ type: 'resize', id, cols, rows }));
   });
 }

@@ -1,5 +1,46 @@
 let activePaneId = null;
 
+// ── Layout / split-view state ─────────────────────────────────────────────────
+// 'single' shows only the active session.
+// 'vsplit' shows the 2 most-recently focused sessions side by side.
+// 'hsplit' shows the 2 most-recently focused sessions stacked.
+let layoutMode = 'single';
+
+// Ordered list of recently focused pane IDs (most-recent first, max 4).
+const recentPaneIds = [];
+
+function setLayoutMode(mode) {
+  layoutMode = mode || 'single';
+  // Update header layout buttons
+  document.querySelectorAll('.layout-btn').forEach(btn => {
+    btn.classList.toggle('layout-active', btn.dataset.layout === layoutMode);
+  });
+  renderPanes();
+  setTimeout(sendResize, 30);
+}
+
+function recordRecentPane(id) {
+  const pid = String(id);
+  const idx = recentPaneIds.indexOf(pid);
+  if (idx !== -1) recentPaneIds.splice(idx, 1);
+  recentPaneIds.unshift(pid);
+  if (recentPaneIds.length > 4) recentPaneIds.pop();
+}
+
+// Return the subset of panes that should be visible based on layoutMode.
+function getVisiblePanes() {
+  const allPanes = (typeof getAllPanesFlat === 'function') ? getAllPanesFlat() : [];
+  const count = { single: 1, vsplit: 2, hsplit: 2, quad: 4 }[layoutMode] || 1;
+  return recentPaneIds
+    .slice(0, count)
+    .map(id => allPanes.find(p => String(p.id) === id))
+    .filter(Boolean);
+}
+
+function getVisiblePaneIds() {
+  return getVisiblePanes().map(p => String(p.id));
+}
+
 function escapeHtml(text) {
   return String(text)
     .replace(/&/g, '&amp;')
@@ -30,28 +71,34 @@ function renderPanes() {
   if (!root) return;
   root.textContent = '';
 
-  const tab = getActiveTab();
-  if (!tab) {
+  const allPanes = (typeof getAllPanesFlat === 'function') ? getAllPanesFlat() : [];
+  if (!allPanes.length) {
     activePaneId = null;
     updateWorkspaceStatus();
     return;
   }
 
-  const paneIds = Array.isArray(tab.paneIds) ? tab.paneIds.map(String) : [];
-  const panes = Array.isArray(tab.panes) ? tab.panes : [];
-  const orderedPanes = paneIds.map(id => panes.find(p => String(p.id) === id)).filter(Boolean);
-  if (!orderedPanes.length) {
-    activePaneId = null;
-    updateWorkspaceStatus();
-    return;
+  // Validate / seed the active pane ID.
+  if (!activePaneId || !allPanes.some(p => String(p.id) === String(activePaneId))) {
+    activePaneId = allPanes[0].id;
+    recordRecentPane(activePaneId);
   }
+  // Make sure activePaneId is always at the front of recentPaneIds.
+  if (!recentPaneIds.includes(String(activePaneId))) recordRecentPane(activePaneId);
 
-  if (!activePaneId || !orderedPanes.some(p => String(p.id) === String(activePaneId))) {
-    activePaneId = tab.activePaneId || orderedPanes[0].id;
-  }
+  const visible = getVisiblePanes();
+  if (!visible.length) return;
 
-  root.className = 'pane-workspace layout-' + (tab.layout || 'single') + ' pane-count-' + orderedPanes.length;
-  orderedPanes.forEach(p => root.appendChild(renderPaneCard(p)));
+  const count = visible.length;
+  const layoutClass =
+    count >= 4 ? 'quad' :
+    count >= 2 && layoutMode === 'hsplit' ? 'hsplit' :
+    count >= 2 ? 'vsplit' :
+    'single';
+
+  root.className = 'pane-workspace layout-' + layoutClass + ' pane-count-' + count;
+  root.dataset.count = count;
+  visible.forEach(p => root.appendChild(renderPaneCard(p)));
   updateWorkspaceStatus();
   setTimeout(sendResize, 20);
 }
@@ -202,12 +249,16 @@ function renderPaneCard(pane) {
 function focusPane(id) {
   const paneId = String(id);
   activePaneId = paneId;
+  recordRecentPane(paneId);
   const session = getActiveSession();
   const tab = getActiveTab();
   if (session && tab) {
     apiPost('/api/pane/focus', { sessionId: session.id, tabId: tab.id, paneId }).catch(() => {});
   }
+  // Highlight both pane cards and tab-bar tabs.
   document.querySelectorAll('.pane-card').forEach(el => el.classList.toggle('active', el.dataset.id === paneId));
+  document.querySelectorAll('.session-tab').forEach(el => el.classList.toggle('active', el.dataset.id === paneId));
+  renderPanes();
   updateWorkspaceStatus();
   setTimeout(sendResize, 10);
 }
@@ -217,17 +268,17 @@ function updateWorkspaceStatus() {
   if (!bar) return;
   const current = activePaneId ? getPaneById(activePaneId) : null;
   if (!current) {
-    bar.textContent = 'No pane selected';
+    bar.textContent = 'No session selected';
     return;
   }
   const p = current.pane;
   const state = paneStateLabel(p);
-  bar.textContent = 'Session: ' + (current.session?.name || '-') +
-    '  |  Tab: ' + (current.tab?.name || '-') +
-    '  |  Pane #' + p.id +
-    '  |  State: ' + state +
-    '  |  Process: ' + (p.processName || p.cmd || 'unknown') +
-    '  |  ' + (p.cwd || '');
+  bar.textContent =
+    'Session #' + p.id +
+    '  ·  ' + (p.cmd || 'unknown') +
+    '  ·  ' + state +
+    '  ·  ' + (p.processName || p.cmd || 'unknown') +
+    '  ·  ' + (p.cwd || '');
 }
 
 function appendLog(id, src, text) {
@@ -331,23 +382,28 @@ function setMonitorMode(id, mode) {
 
 function spawnSession() {
   const session = getActiveSession();
-  const tab = getActiveTab();
-  if (!session || !tab) return;
+  if (!session) return;
   var raw = document.getElementById('cwd-input').value.trim();
   var base = window._basePath || '/tmp';
   var cwd = raw ? (raw.startsWith('/') ? raw : base + '/' + raw) : base;
   const cmd = document.getElementById('cmd-input').value.trim();
-  apiPost('/api/spawn', { cwd, cmd, uiSessionId: session.id, uiTabId: tab.id })
+  // Create a dedicated backend tab for this session, then spawn inside it.
+  // This preserves the 1:1 browser-tab ↔ tmux-session mapping.
+  apiPost('/api/tab/create', { sessionId: session.id, name: cmd || 'session' })
+    .then(r => r.json().catch(() => ({})))
+    .then(tabData => {
+      return apiPost('/api/spawn', { cwd, cmd, uiSessionId: session.id, uiTabId: tabData.tabId });
+    })
     .then(r => r.json().catch(() => ({})).then(d => ({ ok: r.ok, d })))
     .then(({ ok, d }) => {
       if (!ok || d.ok === false) {
-        alert(d.error || 'Invalid path. Pane not created.');
+        alert(d.error || 'Invalid path. Session not created.');
         return;
       }
       addRecent(cwd);
       loadSessions();
     })
-    .catch(() => { alert('Failed to create pane.'); });
+    .catch(() => { alert('Failed to create session.'); });
 }
 
 function splitPane(layout) {
@@ -372,18 +428,21 @@ function scanSessions() {
       const names = found.map(f => '• ' + f.sessionName + ' (' + displayPath(f.cwd) + ')').join('\n');
       if (!confirm('Add these sessions to workspace?\n\n' + names)) return;
       const session = getActiveSession();
-      const tab = getActiveTab();
-      found.forEach(f => apiPost('/api/attach', {
-        sessionName: f.sessionName,
-        cwd: f.cwd,
-        uiSessionId: session?.id,
-        uiTabId: tab?.id,
-      }));
-      setTimeout(loadSessions, 300);
+      // Each found session gets its own backend tab for 1:1 mapping.
+      found.forEach(f => {
+        apiPost('/api/tab/create', { sessionId: session?.id, name: f.sessionName })
+          .then(r => r.json().catch(() => ({})))
+          .then(tabData => apiPost('/api/attach', {
+            sessionName: f.sessionName,
+            cwd: f.cwd,
+            uiSessionId: session?.id,
+            uiTabId: tabData.tabId,
+          }));
+      });
+      setTimeout(loadSessions, 400);
     })
     .catch(() => { btn.textContent = '🔍'; });
 }
-
 function removeWorker(id) {
   closePane(id);
 }
