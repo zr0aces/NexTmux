@@ -9,7 +9,7 @@ const { WebSocketServer } = require("ws");
 const { DEFAULT_PATTERNS, createPatternEngine, extractResetTime, parseResetEpoch } = require("./lib/patternEngine");
 const { createTelegramService } = require("./lib/telegramService");
 const { createSessionStateManager } = require("./lib/sessionStateManager");
-const { createWatcherEngine } = require("./lib/watcherEngine");
+const { createWatcherEngine, getNewLinesCount, cleanRateLimitLine } = require("./lib/watcherEngine");
 
 const PORT = process.env.PORT || 8081;
 const PASSWORD = process.env.DASHBOARD_PASSWORD || "changeme";
@@ -502,6 +502,8 @@ function pollOutput(id) {
     w._lastRows = rows;
   }
   const output = tmuxExec("capture-pane", "-t", w.sessionName, "-p", "-S", "-500", "-J");
+  const newLinesCount = getNewLinesCount(output, lastCapture[id]);
+  w.totalLinesCount = (w.totalLinesCount || 0) + newLinesCount;
 
   // Fetch cwd and pane command in a single tmux call (saves one sub-process per poll)
   const _info = tmuxExec("display-message", "-t", w.sessionName, "-p", "#{pane_current_path}|||#{pane_current_command}").trim().split("|||");
@@ -533,6 +535,22 @@ function pollOutput(id) {
   if (w.aiState === "waiting" && w.resetAtEpochMs && now >= w.resetAtEpochMs) {
     sessionStateManager.clearResetEpoch(w);
     w.tokenResetAt = null;
+
+    // Find the rate limit line in the current output to ignore on next ticks
+    const lines = output.split("\n");
+    let foundLineIndex = -1;
+    for (let i = lines.length - 1; i >= 0; i--) {
+      const line = lines[i];
+      const looksRateLimited = /(?:rate[-_\s]*limit|usage[-_\s]*limit|token[-_\s]*limit|daily[-_\s]*limit|you(?:'|’|re| are|\s)+(?:rate[-_\s]*limited|out of.*uses))/i.test(line);
+      if (looksRateLimited) {
+        foundLineIndex = i;
+        break;
+      }
+    }
+    if (foundLineIndex !== -1) {
+      w.lastRateLimitAbsLine = (w.totalLinesCount || 0) - (lines.length - foundLineIndex);
+    }
+
     if (w.autoMode) {
       w.aiState = "running";
       sessionStateManager.setWaitingState(w, "running");
@@ -543,10 +561,13 @@ function pollOutput(id) {
     return;
   }
 
+  const inspectOutput = cleanRateLimitLine(output, w.totalLinesCount, w.lastRateLimitAbsLine);
+  const previousInspectOutput = cleanRateLimitLine(lastCapture[id], (w.totalLinesCount || 0) - newLinesCount, w.lastRateLimitAbsLine);
+
   const inspect = w.aiMonitorEnabled && monitorConfig.enabled
     ? watcherEngine.inspect({
-        output,
-        previousOutput: lastCapture[id],
+        output: inspectOutput,
+        previousOutput: previousInspectOutput,
         currentState: w.aiState || "running",
         lastChangeTime: w.lastChangeTime,
         now,
@@ -576,7 +597,10 @@ function pollOutput(id) {
       if (resetTime) {
         w.tokenResetAt = resetTime;
         const epoch = parseResetEpoch(resetTime, now);
-        if (epoch) sessionStateManager.setResetEpoch(w, epoch);
+        if (epoch) {
+          sessionStateManager.setResetEpoch(w, epoch);
+          w.lastRateLimitAbsLine = undefined; // clear recovery ignore on new rate limit
+        }
       }
     }
   }
