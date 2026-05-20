@@ -13,6 +13,19 @@ function isWideScreen() {
   return window.innerWidth >= 768;
 }
 
+function normalizePreviewPort(port) {
+  const n = Number.parseInt(String(port), 10);
+  if (!Number.isInteger(n)) return null;
+  if (n < 1024 || n > 65535) return null;
+  return n;
+}
+
+function buildLocalPreviewUrl(port) {
+  const n = normalizePreviewPort(port);
+  if (n == null) return null;
+  return 'http://127.0.0.1:' + n;
+}
+
 // ── Split Preview ──
 
 function ensureSplitPreview(workerId, port) {
@@ -28,32 +41,74 @@ function ensureSplitPreview(workerId, port) {
     return;
   }
 
-  const iframeSrc = 'http://localhost:' + port;
+  const iframeSrc = buildLocalPreviewUrl(port);
+  if (!iframeSrc) return;
 
   const container = document.createElement('div');
   container.className = 'split-preview';
   container.dataset.previewId = tabId;
+  const toolbar = document.createElement('div');
+  toolbar.className = 'preview-toolbar';
 
-  container.innerHTML =
-    '<div class="preview-toolbar">' +
-      '<span class="preview-url" id="preview-url-' + tabId + '">' + iframeSrc + '</span>' +
-      '<button class="preview-btn" onclick="refreshPreview(\'' + tabId + '\')">↺</button>' +
-      '<a class="preview-btn" id="preview-open-' + tabId + '" href="' + iframeSrc + '" target="_blank">↗</a>' +
-      '<button class="split-preview-close" title="Close preview">✕</button>' +
-    '</div>' +
-    '<iframe' +
-      ' id="preview-iframe-' + tabId + '"' +
-      ' class="preview-iframe"' +
-      ' src="' + iframeSrc + '"' +
-      ' sandbox="allow-same-origin allow-scripts allow-popups allow-forms"' +
-      ' loading="lazy"' +
-    '></iframe>' +
-    '<div class="preview-error" id="preview-error-' + tabId + '" style="display:none">' +
-      '<p>Failed to load in iframe.</p>' +
-      '<a href="' + iframeSrc + '" target="_blank">Open in new tab →</a>' +
-    '</div>';
+  const urlSpan = document.createElement('span');
+  urlSpan.className = 'preview-url';
+  urlSpan.id = 'preview-url-' + tabId;
+  urlSpan.textContent = iframeSrc;
 
-  container.querySelector('.split-preview-close').addEventListener('click', () => {
+  const refreshBtn = document.createElement('button');
+  refreshBtn.className = 'preview-btn';
+  refreshBtn.textContent = '↺';
+  refreshBtn.addEventListener('click', () => refreshPreview(tabId));
+
+  const openLink = document.createElement('a');
+  openLink.className = 'preview-btn';
+  openLink.id = 'preview-open-' + tabId;
+  openLink.href = '#';
+  openLink.rel = 'noopener noreferrer';
+  openLink.textContent = '↗';
+  openLink.addEventListener('click', (e) => {
+    e.preventDefault();
+    window.open(iframeSrc, '_blank', 'noopener,noreferrer');
+  });
+
+  const closeBtn = document.createElement('button');
+  closeBtn.className = 'split-preview-close';
+  closeBtn.title = 'Close preview';
+  closeBtn.textContent = '✕';
+
+  toolbar.appendChild(urlSpan);
+  toolbar.appendChild(refreshBtn);
+  toolbar.appendChild(openLink);
+  toolbar.appendChild(closeBtn);
+
+  const iframe = document.createElement('iframe');
+  iframe.id = 'preview-iframe-' + tabId;
+  iframe.className = 'preview-iframe';
+  iframe.src = 'about:blank';
+  iframe.sandbox = 'allow-same-origin allow-scripts allow-popups allow-forms';
+  iframe.loading = 'lazy';
+
+  const errBox = document.createElement('div');
+  errBox.className = 'preview-error';
+  errBox.id = 'preview-error-' + tabId;
+  errBox.style.display = 'none';
+  const errP = document.createElement('p');
+  errP.textContent = 'Failed to load in iframe.';
+  const errLink = document.createElement('button');
+  errLink.className = 'preview-btn';
+  errLink.type = 'button';
+  errLink.textContent = 'Open in new tab →';
+  errLink.addEventListener('click', () => {
+    window.open(iframeSrc, '_blank', 'noopener,noreferrer');
+  });
+  errBox.appendChild(errP);
+  errBox.appendChild(errLink);
+
+  container.appendChild(toolbar);
+  container.appendChild(iframe);
+  container.appendChild(errBox);
+
+  closeBtn.addEventListener('click', () => {
     closeSplitPreview(workerId, tabId);
   });
 
@@ -124,10 +179,17 @@ function ensurePreviewTab(workerId, port) {
   tab.className = 'tab';
   tab.dataset.id = tabId;
   tab.dataset.preview = 'true';
-  tab.innerHTML =
-    '<span class="tab-dot preview-dot"></span>' +
-    '<span class="tab-label">:' + port + '</span>' +
-    '<span class="tab-close preview-close">✕</span>';
+  const tabDot = document.createElement('span');
+  tabDot.className = 'tab-dot preview-dot';
+  const tabLabel = document.createElement('span');
+  tabLabel.className = 'tab-label';
+  tabLabel.textContent = ':' + port;
+  const tabClose = document.createElement('span');
+  tabClose.className = 'tab-close preview-close';
+  tabClose.textContent = '✕';
+  tab.appendChild(tabDot);
+  tab.appendChild(tabLabel);
+  tab.appendChild(tabClose);
   tab.addEventListener('click', (e) => {
     if (e.target.classList.contains('preview-close')) return;
     selectTab(tabId);
@@ -138,25 +200,58 @@ function ensurePreviewTab(workerId, port) {
   panel.className = 'tab-panel preview-panel';
   panel.dataset.id = tabId;
 
-  const iframeSrc = 'http://localhost:' + port;
+  const iframeSrc = buildLocalPreviewUrl(port);
+  if (!iframeSrc) return;
+  const toolbar = document.createElement('div');
+  toolbar.className = 'preview-toolbar';
+  const urlSpan = document.createElement('span');
+  urlSpan.className = 'preview-url';
+  urlSpan.id = 'preview-url-' + tabId;
+  urlSpan.textContent = iframeSrc;
+  const refreshBtn = document.createElement('button');
+  refreshBtn.className = 'preview-btn';
+  refreshBtn.textContent = '↺ Refresh';
+  refreshBtn.addEventListener('click', () => refreshPreview(tabId));
+  const openLink = document.createElement('a');
+  openLink.className = 'preview-btn';
+  openLink.id = 'preview-open-' + tabId;
+  openLink.href = '#';
+  openLink.rel = 'noopener noreferrer';
+  openLink.textContent = '↗ New tab';
+  openLink.addEventListener('click', (e) => {
+    e.preventDefault();
+    window.open(iframeSrc, '_blank', 'noopener,noreferrer');
+  });
+  toolbar.appendChild(urlSpan);
+  toolbar.appendChild(refreshBtn);
+  toolbar.appendChild(openLink);
 
-  panel.innerHTML =
-    '<div class="preview-toolbar">' +
-      '<span class="preview-url" id="preview-url-' + tabId + '">' + iframeSrc + '</span>' +
-      '<button class="preview-btn" onclick="refreshPreview(\'' + tabId + '\')">↺ Refresh</button>' +
-      '<a class="preview-btn" id="preview-open-' + tabId + '" href="' + iframeSrc + '" target="_blank">↗ New tab</a>' +
-    '</div>' +
-    '<iframe' +
-      ' id="preview-iframe-' + tabId + '"' +
-      ' class="preview-iframe"' +
-      ' src="' + iframeSrc + '"' +
-      ' sandbox="allow-same-origin allow-scripts allow-popups allow-forms"' +
-      ' loading="lazy"' +
-    '></iframe>' +
-    '<div class="preview-error" id="preview-error-' + tabId + '" style="display:none">' +
-      '<p>Failed to load in iframe.</p>' +
-      '<a href="' + iframeSrc + '" target="_blank">Open in new tab →</a>' +
-    '</div>';
+  const iframe = document.createElement('iframe');
+  iframe.id = 'preview-iframe-' + tabId;
+  iframe.className = 'preview-iframe';
+  iframe.src = 'about:blank';
+  iframe.sandbox = 'allow-same-origin allow-scripts allow-popups allow-forms';
+  iframe.loading = 'lazy';
+
+  const errBox = document.createElement('div');
+  errBox.className = 'preview-error';
+  errBox.id = 'preview-error-' + tabId;
+  errBox.style.display = 'none';
+  const errP = document.createElement('p');
+  errP.textContent = 'Failed to load in iframe.';
+  const errLink = document.createElement('button');
+  errLink.className = 'preview-btn';
+  errLink.type = 'button';
+  errLink.textContent = 'Open in new tab →';
+  errLink.addEventListener('click', () => {
+    window.open(iframeSrc, '_blank', 'noopener,noreferrer');
+  });
+  errBox.appendChild(errP);
+  errBox.appendChild(errLink);
+
+  panel.appendChild(toolbar);
+  panel.appendChild(iframe);
+  panel.appendChild(errBox);
 
   // Close button event
   tab.querySelector('.preview-close').addEventListener('click', () => closePreviewTab(tabId));
