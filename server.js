@@ -10,6 +10,7 @@ const { DEFAULT_PATTERNS, createPatternEngine, extractResetTime, parseResetEpoch
 const { createTelegramService } = require("./lib/telegramService");
 const { createSessionStateManager } = require("./lib/sessionStateManager");
 const { createWatcherEngine, getNewLinesCount, cleanRateLimitLine } = require("./lib/watcherEngine");
+const { createMessageProcessor, RATE_LIMIT_PATTERN_NAMES } = require("./lib/messageProcessor");
 
 const PORT = process.env.PORT || 8081;
 const PASSWORD = process.env.DASHBOARD_PASSWORD || "changeme";
@@ -51,7 +52,7 @@ const MAX_LOGIN_ATTEMPTS = 20;
 const TRUST_PROXY = process.env.TRUST_PROXY === "1";
 const SESSION_TTL_MS = Math.max(60000, Number(process.env.SESSION_TTL_MS) || 7 * 24 * 60 * 60 * 1000);
 const loginAttempts = new Map();
-const RATE_LIMIT_PATTERNS = new Set(["token_limit", "usage_limit", "rate_limited", "rate_limit_options"]);
+const RATE_LIMIT_PATTERNS = RATE_LIMIT_PATTERN_NAMES;
 
 function createToken() {
   return crypto.randomBytes(32).toString("hex");
@@ -201,7 +202,10 @@ const sessionStateManager = createSessionStateManager({
   stateFilePath: path.join(__dirname, "state", "session-state.json"),
 });
 const watcherEngine = createWatcherEngine({
-  patternEngine,
+  messageProcessor: createMessageProcessor({
+    patternEngine,
+    linesToInspect: monitorConfig.linesToInspect,
+  }),
   options: { enabled: monitorConfig.enabled, idleThresholdMs: monitorConfig.idleThresholdMs },
 });
 const telegramService = createTelegramService({
@@ -233,20 +237,6 @@ function inferExitReason(w, fallback) {
     return `Command '${w.expectedCmd}' is no longer active (pane now '${w.lastPaneCommand}').`;
   }
   return fallback || "Session exited (reason unknown).";
-}
-
-function resolveAutoModeResponse(detection) {
-  const excerpt = String(detection?.excerpt || "");
-  const hasListYesOption = /(?:^|\n)\s*1\s*[\].):]\s*yes\b/im.test(excerpt);
-  const hasRateLimitOptionOne = /(?:^|\n)\s*1\s*[\].):]\s*stop\s+and\s+wait\s+for\s+limit\s+to\s+reset\b/im.test(excerpt);
-  const hasAnyOptionOne = /(?:^|\n)\s*1\s*[\].):]/im.test(excerpt);
-  const looksRateLimited = RATE_LIMIT_PATTERNS.has(detection?.patternName)
-    || /(?:\/rate-limit-options|rate\s*limit|usage\s*limit|token\s*limit|you(?:'|’)ve hit your limit)/i.test(excerpt);
-
-  if (hasRateLimitOptionOne || (/\/rate-limit-options/i.test(excerpt) && hasAnyOptionOne)) return "1";
-  if (looksRateLimited) return null;
-  if (detection?.patternName === "press_enter") return "";
-  return hasListYesOption ? "1" : "y";
 }
 
 // Well-known infrastructure service ports — excluded from preview detection to avoid false positives
@@ -633,7 +623,7 @@ function pollOutput(id) {
       broadcastMonitorMeta(id);
       return;
     }
-    const autoResponse = resolveAutoModeResponse(inspect.detection);
+    const autoResponse = inspect.detection?.autoResponse;
     if (autoResponse !== null) {
       sendInput(id, autoResponse);
       w.lastAutoResponseKey = responseKey || String(now);

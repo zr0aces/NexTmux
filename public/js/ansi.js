@@ -50,6 +50,29 @@
       .replace(/>/g, '&gt;');
   }
 
+  function isNum(n) {
+    return typeof n === 'number' && !Number.isNaN(n);
+  }
+
+  function toSgrCodes(params) {
+    if (!params) return [0];
+    return String(params)
+      .split(/[;:]/)
+      .map(function (token) {
+        if (token === '') return NaN;
+        var n = Number(token);
+        return Number.isFinite(n) ? n : NaN;
+      });
+  }
+
+  function clampByte(n) {
+    n = Number(n);
+    if (!Number.isFinite(n)) return 0;
+    if (n < 0) return 0;
+    if (n > 255) return 255;
+    return Math.round(n);
+  }
+
   // Main converter
   function ansiToHtml(raw) {
     if (!raw) return '';
@@ -82,8 +105,10 @@
       if (bold)   style += 'font-weight:700;';
       if (dim)    style += 'opacity:.55;';
       if (italic) style += 'font-style:italic;';
-      if (under)  style += 'text-decoration:underline;';
-      if (strike) style += 'text-decoration:line-through;';
+      var textDecorations = [];
+      if (under) textDecorations.push('underline');
+      if (strike) textDecorations.push('line-through');
+      if (textDecorations.length) style += 'text-decoration:' + textDecorations.join(' ') + ';';
       if (blink)  style += 'animation:ansi-blink 1s step-start infinite;';
       out += '<span style="' + style + '">' + e + '</span>';
     }
@@ -98,12 +123,14 @@
 
       if (cmd === 'm') {
         // SGR — Select Graphic Rendition
-        var codes = params ? params.split(';').map(Number) : [0];
+        var codes = toSgrCodes(params);
         var i = 0;
         while (i < codes.length) {
           var c = codes[i];
+          if (!isNum(c)) { i++; continue; }
           if      (c === 0)  { fg = null; bg = null; bold = dim = italic = under = strike = blink = false; }
           else if (c === 1)  bold   = true;
+          else if (c === 21) bold   = false;
           else if (c === 2)  dim    = true;
           else if (c === 3)  italic = true;
           else if (c === 4)  under  = true;
@@ -116,19 +143,25 @@
           else if (c === 29) strike = false;
           else if (c >= 30 && c <= 37) fg = C16[c - 30];
           else if (c === 38) {
-            if (codes[i + 1] === 5 && i + 2 < codes.length) {
+            if (codes[i + 1] === 5 && isNum(codes[i + 2]) && i + 2 < codes.length) {
               fg = c256(codes[i + 2]); i += 2;
-            } else if (codes[i + 1] === 2 && i + 4 < codes.length) {
-              fg = 'rgb(' + codes[i+2] + ',' + codes[i+3] + ',' + codes[i+4] + ')'; i += 4;
+            } else if (codes[i + 1] === 2 && isNum(codes[i + 2]) && isNum(codes[i + 3]) && isNum(codes[i + 4]) && i + 4 < codes.length) {
+              fg = 'rgb(' + clampByte(codes[i+2]) + ',' + clampByte(codes[i+3]) + ',' + clampByte(codes[i+4]) + ')'; i += 4;
+            } else if (codes[i + 1] === 2 && !isNum(codes[i + 2]) && isNum(codes[i + 3]) && isNum(codes[i + 4]) && isNum(codes[i + 5]) && i + 5 < codes.length) {
+              // 24-bit variant with an empty colorspace slot, e.g. 38:2::R:G:B
+              fg = 'rgb(' + clampByte(codes[i+3]) + ',' + clampByte(codes[i+4]) + ',' + clampByte(codes[i+5]) + ')'; i += 5;
             }
           }
           else if (c === 39) fg = null;
           else if (c >= 40 && c <= 47) bg = C16[c - 40];
           else if (c === 48) {
-            if (codes[i + 1] === 5 && i + 2 < codes.length) {
+            if (codes[i + 1] === 5 && isNum(codes[i + 2]) && i + 2 < codes.length) {
               bg = c256(codes[i + 2]); i += 2;
-            } else if (codes[i + 1] === 2 && i + 4 < codes.length) {
-              bg = 'rgb(' + codes[i+2] + ',' + codes[i+3] + ',' + codes[i+4] + ')'; i += 4;
+            } else if (codes[i + 1] === 2 && isNum(codes[i + 2]) && isNum(codes[i + 3]) && isNum(codes[i + 4]) && i + 4 < codes.length) {
+              bg = 'rgb(' + clampByte(codes[i+2]) + ',' + clampByte(codes[i+3]) + ',' + clampByte(codes[i+4]) + ')'; i += 4;
+            } else if (codes[i + 1] === 2 && !isNum(codes[i + 2]) && isNum(codes[i + 3]) && isNum(codes[i + 4]) && isNum(codes[i + 5]) && i + 5 < codes.length) {
+              // 24-bit variant with an empty colorspace slot, e.g. 48:2::R:G:B
+              bg = 'rgb(' + clampByte(codes[i+3]) + ',' + clampByte(codes[i+4]) + ',' + clampByte(codes[i+5]) + ')'; i += 5;
             }
           }
           else if (c === 49) bg = null;
