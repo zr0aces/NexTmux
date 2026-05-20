@@ -97,6 +97,24 @@ function renderPaneCard(pane) {
     '<div class="input-row" id="input-row-' + id + '">' +
       '<textarea id="inp-' + id + '" placeholder="Enter command..." rows="1"></textarea>' +
       '<button id="send-' + id + '">Send</button>' +
+      '<div class="toolkit-wrap">' +
+        '<button class="toolkit-toggle" id="tk-btn-' + id + '" title="Virtual keyboard">⌨</button>' +
+        '<div class="toolkit-popup" id="tk-popup-' + id + '">' +
+          '<div class="tk-label">Keys</div>' +
+          '<div class="key-grid">' +
+            '<button class="key-btn" id="key-esc-' + id + '">esc</button>' +
+            '<button class="key-btn" id="key-up-' + id + '">↑</button>' +
+            '<button class="key-btn" id="key-down-' + id + '">↓</button>' +
+            '<button class="key-btn key-enter" id="key-enter-' + id + '">↵</button>' +
+            '<button class="key-btn" id="key-tab-' + id + '">tab</button>' +
+            '<button class="key-btn" id="key-stab-' + id + '">⇧tab</button>' +
+            '<button class="key-btn" id="key-ctrlc-' + id + '">⌃c</button>' +
+            '<button class="key-btn quick-cmd-btn" id="quick-proceed-' + id + '">proceed</button>' +
+            '<button class="key-btn quick-cmd-btn" id="quick-continue-' + id + '">continue</button>' +
+            '<button class="key-btn quick-cmd-btn" id="quick-yes-' + id + '">yes</button>' +
+          '</div>' +
+        '</div>' +
+      '</div>' +
     '</div>';
 
   wrap.addEventListener('mousedown', () => focusPane(id));
@@ -123,6 +141,46 @@ function renderPaneCard(pane) {
   inp.addEventListener('input', () => {
     inp.style.height = 'auto';
     inp.style.height = Math.min(inp.scrollHeight, 120) + 'px';
+  });
+
+  const tkBtn = wrap.querySelector('#tk-btn-' + id);
+  const tkPopup = wrap.querySelector('#tk-popup-' + id);
+  if (tkBtn && tkPopup) {
+    tkBtn.addEventListener('click', e => {
+      e.stopPropagation();
+      const isOpen = tkPopup.classList.toggle('open');
+      tkBtn.classList.toggle('open', isOpen);
+      document.querySelectorAll('.toolkit-popup.open').forEach(p => {
+        if (p !== tkPopup) {
+          p.classList.remove('open');
+          if (p.previousElementSibling) p.previousElementSibling.classList.remove('open');
+        }
+      });
+    });
+  }
+
+  const keyMap = {
+    up: 'Up',
+    down: 'Down',
+    enter: 'Enter',
+    esc: 'Escape',
+    tab: 'Tab',
+    stab: 'BTab',
+    ctrlc: 'C-c',
+  };
+  Object.entries(keyMap).forEach(([btnId, tmuxKey]) => {
+    const btn = wrap.querySelector('#key-' + btnId + '-' + id);
+    if (btn) btn.addEventListener('click', () => sendSpecialKey(id, tmuxKey));
+  });
+
+  const quickMap = {
+    proceed: 'proceed',
+    continue: 'continue',
+    yes: 'yes',
+  };
+  Object.entries(quickMap).forEach(([btnId, value]) => {
+    const btn = wrap.querySelector('#quick-' + btnId + '-' + id);
+    if (btn) btn.addEventListener('click', () => sendQuickCommand(id, value));
   });
 
   const monitorMode = pane.monitorMode || (pane.aiMonitorEnabled === false ? 'off' : (pane.autoMode ? 'auto' : 'monitor'));
@@ -339,4 +397,8 @@ function ensureCard() {}
 function bindTabDrag() {}
 function renderTitle() {}
 function updateExitReason() {}
-function sendQuickCommand(id, text) { apiPost('/api/input', { id: String(id), text }); }
+function sendQuickCommand(id, text) {
+  focusPane(id);
+  notifyActive();
+  apiPost('/api/input', { id: String(id), text: String(text || '') });
+}
