@@ -168,6 +168,10 @@ function ensureCard(id, cwd, status, logs, cmd, reason, monitorMeta) {
   }
 
   renderTitle(id, cwd, cmdLabel);
+  const logsBox = document.getElementById('logs-' + id);
+  if (logsBox) {
+    initLogScrollLock(logsBox);
+  }
   if (logs) logs.forEach(l => appendLog(id, l.src, l.text));
   if (reason) updateExitReason(id, reason);
   if (status === 'running') updateExitReason(id, null);
@@ -255,15 +259,31 @@ function isNearBottom(box) {
   return box.scrollHeight - box.scrollTop - box.clientHeight < 50;
 }
 
+function initLogScrollLock(box) {
+  if (!box || box.dataset.scrollLockBound === '1') return;
+  box.dataset.scrollLockBound = '1';
+  box.dataset.scrollLock = '0';
+  box.addEventListener('scroll', () => {
+    box.dataset.scrollLock = isNearBottom(box) ? '0' : '1';
+  }, { passive: true });
+  box.dataset.scrollLock = isNearBottom(box) ? '0' : '1';
+}
+
+function isAutoScrollEnabled(box) {
+  if (!box) return false;
+  return box.dataset.scrollLock !== '1';
+}
+
 function appendLog(id, src, text) {
   const box = document.getElementById('logs-' + id);
   if (box) {
-    var wasAtBottom = isNearBottom(box);
+    initLogScrollLock(box);
+    var shouldAutoScroll = isAutoScrollEnabled(box);
     const line = document.createElement('div');
     line.className = 'log-line ' + src;
     line.innerHTML = (typeof ansiToHtml === 'function') ? ansiToHtml(text) : text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
     box.appendChild(line);
-    if (wasAtBottom) box.scrollTop = box.scrollHeight;
+    if (shouldAutoScroll) box.scrollTop = box.scrollHeight;
   }
 }
 

@@ -29,7 +29,10 @@ function handleMsg(d) {
   if (d.type === 'snapshot') {
     const box = document.getElementById('logs-' + d.id);
     if (box) {
-      var wasAtBottom = isNearBottom(box);
+      if (typeof initLogScrollLock === 'function') initLogScrollLock(box);
+      var shouldAutoScroll = typeof isAutoScrollEnabled === 'function'
+        ? isAutoScrollEnabled(box)
+        : isNearBottom(box);
       box.innerHTML = '';
       d.lines.forEach(text => {
         const line = document.createElement('div');
@@ -37,7 +40,7 @@ function handleMsg(d) {
         line.innerHTML = (typeof ansiToHtml === 'function') ? ansiToHtml(text) : text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
         box.appendChild(line);
       });
-      if (wasAtBottom) box.scrollTop = box.scrollHeight;
+      if (shouldAutoScroll) box.scrollTop = box.scrollHeight;
     }
   }
 }
