@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>TmuxHub — Premium Tmux Workspace Manager</title>
-<meta name="description" content="A lightweight, real-time developer terminal dashboard and workspace manager powered by Tmux and active monitoring.">
+<title>TmuxHub — Terminal Workspace</title>
+<meta name="description" content="A lightweight web-based tmux-inspired terminal workspace.">
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%230f172a'/%3E%3Cline x1='16' y1='4' x2='16' y2='28' stroke='%23334155' stroke-width='2'/%3E%3Cpath d='M6 10 L10 13 L6 16' fill='none' stroke='%23ea580c' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3Crect x='20' y='19' width='6' height='2' fill='%2338bdf8'/%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -25,20 +25,20 @@
       </svg>
       <h2>TmuxHub</h2>
     </div>
-    <p class="login-subtitle">Tmux Workspace Manager <span class="login-version">v2026.5.7</span></p>
-    
+    <p class="login-subtitle">Tmux Workspace <span class="login-version">v2026.5.7</span></p>
+
     <div class="login-input-group">
       <input id="pw" type="password" placeholder="Enter Access Password..." />
     </div>
-    
+
     <label class="login-remember">
       <input id="remember-pw" type="checkbox" />
       Remember Password
     </label>
-    
-    <button id="login-btn">Unlock Dashboard</button>
+
+    <button id="login-btn">Unlock Workspace</button>
     <button id="clear-saved-pw-btn" class="login-secondary-btn" type="button" style="display:none">Clear Saved Key</button>
-    
+
     <span id="login-err">Incorrect password</span>
   </div>
 </div>
@@ -55,13 +55,19 @@
       </svg>
       <h1>TmuxHub</h1>
     </div>
-    <div class="layout-group">
-      <button id="layout-tab-btn" class="header-btn layout-active">Tab</button>
-      <button id="layout-split-btn" class="header-btn">Split</button>
+
+    <div class="workspace-controls">
+      <select id="session-select" class="header-select"></select>
+      <button id="session-add-btn" class="header-btn" title="New Session">+S</button>
+      <button id="session-rename-btn" class="header-btn" title="Rename Session">S✎</button>
+      <button id="session-close-btn" class="header-btn" title="Close Session">S✕</button>
+      <button id="tab-add-btn" class="header-btn" title="New Tab">+T</button>
+      <button id="tab-close-btn" class="header-btn" title="Close Tab">T✕</button>
+      <button id="pane-split-h-btn" class="header-btn" title="Horizontal Split">⇅</button>
+      <button id="pane-split-v-btn" class="header-btn" title="Vertical Split">⇄</button>
+      <button id="scan-btn" class="header-btn">🔍</button>
+      <button id="toggle-toolbar-btn" class="header-btn accent">+</button>
     </div>
-    <div class="header-divider"></div>
-    <button id="scan-btn" class="header-btn">🔍</button>
-    <button id="toggle-toolbar-btn" class="header-btn accent">+</button>
   </header>
 
   <div class="toolbar" id="spawn-toolbar" style="display:none">
@@ -77,29 +83,27 @@
       </div>
     </div>
     <button id="dir-btn">📁</button>
-    <button id="spawn-btn" class="primary">+ New</button>
+    <button id="spawn-btn" class="primary">+ New Pane</button>
   </div>
 
-  <!-- Tab mode -->
-  <div id="tab-mode" style="flex:1;display:flex;flex-direction:column;overflow:hidden">
+  <div id="workspace" style="flex:1;display:flex;flex-direction:column;overflow:hidden">
     <div id="tab-bar"></div>
     <div id="tab-content"></div>
   </div>
 
-  <!-- Split mode -->
-  <div id="split-mode" style="flex:1;overflow:hidden;display:none">
-    <div id="split-content"></div>
-  </div>
+  <div id="workspace-status" class="workspace-status">No pane selected</div>
 </div>
 
 <script src="/js/ansi.js?v=2026.5.7"></script>
+<script src="/js/session.js?v=2026.5.7"></script>
+<script src="/js/tabs.js?v=2026.5.7"></script>
 <script src="/js/layout.js?v=2026.5.7"></script>
 <script src="/js/favorites.js?v=2026.5.7"></script>
 <script src="/js/ws.js?v=2026.5.7"></script>
 <script src="/js/preview.js?v=2026.5.7"></script>
 <script src="https://cdn.jsdelivr.net/npm/diff2html/bundles/js/diff2html-ui-slim.min.js"></script>
 <script src="/js/git-diff.js?v=2026.5.7"></script>
-<script src="/js/workers.js?v=2026.5.7"></script>
+<script src="/js/pane.js?v=2026.5.7"></script>
 <script src="/js/app.js?v=2026.5.7"></script>
 </body>
 </html>

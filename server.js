@@ -37,7 +37,11 @@ if (PASSWORD === "changeme") {
 
 const sessions = new Map();
 const workers = new Map();
+const uiSessions = new Map();
 let nextId = 1;
+let nextSessionId = 1;
+let nextTabId = 1;
+let activeUiSessionId = null;
 let tunnelUrl = null;
 let tunnelProcess = null;
 let tunnelHealthFailures = 0;
@@ -208,10 +212,246 @@ const telegramService = createTelegramService({
   botToken: TELEGRAM_BOT_TOKEN,
   chatId: TELEGRAM_CHAT_ID,
 });
+restoreUiSessionsFromSnapshot();
 
 function getBaseCommand(cmd) {
   if (!cmd) return "";
   return String(cmd).trim().split(/\s+/)[0] || "";
+}
+
+function toPaneId(id) {
+  return String(id || "");
+}
+
+function serializeUiSessions() {
+  return {
+    nextSessionId,
+    nextTabId,
+    activeSessionId: activeUiSessionId,
+    sessions: [...uiSessions.values()].map((session) => ({
+      id: session.id,
+      name: session.name,
+      activeTabId: session.activeTabId,
+      tabs: [...session.tabs.values()].map((tab) => ({
+        id: tab.id,
+        name: tab.name,
+        paneIds: [...tab.paneIds],
+        layout: tab.layout || "single",
+        activePaneId: tab.activePaneId || null,
+      })),
+    })),
+  };
+}
+
+function persistUiSessions() {
+  sessionStateManager.setUiLayout(serializeUiSessions());
+}
+
+function getSessionOrNull(id) {
+  return uiSessions.get(String(id || "")) || null;
+}
+
+function getTabOrNull(session, tabId) {
+  if (!session) return null;
+  return session.tabs.get(String(tabId || "")) || null;
+}
+
+function createUiSession(name = null, skipPersist = false) {
+  const id = String(nextSessionId++);
+  const session = {
+    id,
+    name: String(name || `Session ${id}`),
+    tabs: new Map(),
+    activeTabId: null,
+  };
+  uiSessions.set(id, session);
+  activeUiSessionId = id;
+  if (!skipPersist) persistUiSessions();
+  return session;
+}
+
+function createUiTab(sessionId, name = null, layout = "single", skipPersist = false) {
+  const session = getSessionOrNull(sessionId);
+  if (!session) return null;
+  const id = String(nextTabId++);
+  const tab = {
+    id,
+    name: String(name || `Tab ${id}`),
+    paneIds: [],
+    layout: layout || "single",
+    activePaneId: null,
+  };
+  session.tabs.set(id, tab);
+  session.activeTabId = id;
+  activeUiSessionId = session.id;
+  if (!skipPersist) persistUiSessions();
+  return tab;
+}
+
+function ensureUiDefaults() {
+  if (uiSessions.size > 0) return;
+  const main = createUiSession("Main", true);
+  createUiTab(main.id, "Tab 1", "single", true);
+  activeUiSessionId = main.id;
+  persistUiSessions();
+}
+
+function resolveUiTarget(sessionId = null, tabId = null) {
+  ensureUiDefaults();
+  const preferredSession = getSessionOrNull(sessionId) || getSessionOrNull(activeUiSessionId) || uiSessions.values().next().value;
+  if (!preferredSession) return { session: null, tab: null };
+  activeUiSessionId = preferredSession.id;
+  let tab = getTabOrNull(preferredSession, tabId) || getTabOrNull(preferredSession, preferredSession.activeTabId);
+  if (!tab) tab = createUiTab(preferredSession.id, "Tab 1", "single");
+  preferredSession.activeTabId = tab.id;
+  return { session: preferredSession, tab };
+}
+
+function findPaneLocation(paneId) {
+  const needle = toPaneId(paneId);
+  for (const session of uiSessions.values()) {
+    for (const tab of session.tabs.values()) {
+      const idx = tab.paneIds.findIndex((id) => String(id) === needle);
+      if (idx !== -1) return { session, tab, index: idx };
+    }
+  }
+  return null;
+}
+
+function attachPaneToUi(paneId, sessionId = null, tabId = null) {
+  const id = toPaneId(paneId);
+  const existing = findPaneLocation(id);
+  if (existing) {
+    existing.tab.paneIds = existing.tab.paneIds.filter((pid) => String(pid) !== id);
+    if (existing.tab.activePaneId === id) existing.tab.activePaneId = existing.tab.paneIds[0] || null;
+  }
+  const { session, tab } = resolveUiTarget(sessionId, tabId);
+  if (!session || !tab) return null;
+  if (!tab.paneIds.includes(id)) tab.paneIds.push(id);
+  tab.activePaneId = id;
+  session.activeTabId = tab.id;
+  activeUiSessionId = session.id;
+  const worker = workers.get(id);
+  if (worker) {
+    worker.uiSessionId = session.id;
+    worker.uiTabId = tab.id;
+  }
+  persistUiSessions();
+  return { session, tab };
+}
+
+function detachPaneFromUi(paneId, { cleanupEmptyTab = false } = {}) {
+  const id = toPaneId(paneId);
+  const loc = findPaneLocation(id);
+  if (!loc) return;
+  loc.tab.paneIds = loc.tab.paneIds.filter((pid) => String(pid) !== id);
+  if (loc.tab.activePaneId === id) loc.tab.activePaneId = loc.tab.paneIds[0] || null;
+
+  if (cleanupEmptyTab && loc.tab.paneIds.length === 0) {
+    loc.session.tabs.delete(loc.tab.id);
+    if (loc.session.activeTabId === loc.tab.id) {
+      loc.session.activeTabId = loc.session.tabs.size ? loc.session.tabs.values().next().value.id : null;
+    }
+    if (loc.session.tabs.size === 0) {
+      createUiTab(loc.session.id, "Tab 1", "single");
+    }
+  }
+  persistUiSessions();
+}
+
+function broadcastUiEvent(type = "session_updated") {
+  broadcast({ type, ui: buildUiApiPayload() });
+}
+
+function buildUiApiPayload() {
+  ensureUiDefaults();
+  return {
+    activeSessionId: activeUiSessionId,
+    sessions: [...uiSessions.values()].map((session) => ({
+      id: session.id,
+      name: session.name,
+      activeTabId: session.activeTabId,
+      tabs: [...session.tabs.values()].map((tab) => ({
+        id: tab.id,
+        name: tab.name,
+        layout: tab.layout || "single",
+        activePaneId: tab.activePaneId || null,
+        paneIds: [...tab.paneIds],
+        panes: tab.paneIds
+          .map((paneId) => {
+            const w = workers.get(String(paneId));
+            if (!w) return null;
+            return {
+              id: String(paneId),
+              cwd: w.cwd,
+              cmd: w.cmd || "claude",
+              status: (w.status === "completed" || w.status === "stopped") ? w.status : (isAlive(w.sessionName) ? "running" : (w.status || "stopped")),
+              aiState: w.aiState || null,
+              processName: w.lastPaneCommand || w.cmd || "unknown",
+              exitReason: w.exitReason || null,
+              logs: w.logs || [],
+              ...getMonitorMeta(w),
+            };
+          })
+          .filter(Boolean),
+      })),
+    })),
+  };
+}
+
+function restoreUiSessionsFromSnapshot() {
+  const ui = sessionStateManager.getUiLayout();
+  if (!ui || typeof ui !== "object" || !Array.isArray(ui.sessions)) {
+    ensureUiDefaults();
+    return;
+  }
+  uiSessions.clear();
+  nextSessionId = Math.max(1, Number(ui.nextSessionId) || 1);
+  nextTabId = Math.max(1, Number(ui.nextTabId) || 1);
+  for (const rawSession of ui.sessions) {
+    const sid = String(rawSession?.id || "");
+    if (!sid) continue;
+    const session = {
+      id: sid,
+      name: String(rawSession?.name || `Session ${sid}`),
+      tabs: new Map(),
+      activeTabId: rawSession?.activeTabId ? String(rawSession.activeTabId) : null,
+    };
+    const rawTabs = Array.isArray(rawSession?.tabs) ? rawSession.tabs : [];
+    for (const rawTab of rawTabs) {
+      const tid = String(rawTab?.id || "");
+      if (!tid) continue;
+      session.tabs.set(tid, {
+        id: tid,
+        name: String(rawTab?.name || `Tab ${tid}`),
+        paneIds: Array.isArray(rawTab?.paneIds) ? rawTab.paneIds.map((id) => String(id)) : [],
+        layout: rawTab?.layout || "single",
+        activePaneId: rawTab?.activePaneId ? String(rawTab.activePaneId) : null,
+      });
+    }
+    if (session.tabs.size === 0) {
+      const tid = String(nextTabId++);
+      session.tabs.set(tid, { id: tid, name: "Tab 1", paneIds: [], layout: "single", activePaneId: null });
+      session.activeTabId = tid;
+    } else if (!session.activeTabId || !session.tabs.has(session.activeTabId)) {
+      session.activeTabId = session.tabs.values().next().value.id;
+    }
+    uiSessions.set(sid, session);
+  }
+  if (uiSessions.size === 0) {
+    ensureUiDefaults();
+    return;
+  }
+  const maxSid = Math.max(...[...uiSessions.keys()].map((id) => Number(id) || 0), 0);
+  const maxTid = Math.max(
+    ...[...uiSessions.values()].flatMap((s) => [...s.tabs.keys()].map((id) => Number(id) || 0)),
+    0
+  );
+  nextSessionId = Math.max(nextSessionId, maxSid + 1);
+  nextTabId = Math.max(nextTabId, maxTid + 1);
+  activeUiSessionId = ui.activeSessionId && uiSessions.has(String(ui.activeSessionId))
+    ? String(ui.activeSessionId)
+    : uiSessions.values().next().value.id;
 }
 
 function rememberAction(w, type, detail) {
@@ -383,7 +623,7 @@ function broadcastMonitorMeta(id) {
   broadcast({ type: "monitorMeta", id, ...nextMeta });
 }
 
-function spawnWorker(cwd, cmd) {
+function spawnWorker(cwd, cmd, uiSessionId = null, uiTabId = null) {
   cmd = cmd || appConfig.defaultCommand || "claude";
   const id = String(nextId++);
   const sessionName = "term-" + id;
@@ -401,10 +641,19 @@ function spawnWorker(cwd, cmd) {
     exitReason: null,
     lastPaneCommand: null,
     lastAction: null,
+    uiSessionId: null,
+    uiTabId: null,
   });
+  const attached = attachPaneToUi(id, uiSessionId, uiTabId);
+  if (attached) {
+    const w = workers.get(id);
+    w.uiSessionId = attached.session.id;
+    w.uiTabId = attached.tab.id;
+  }
   initializeWorkerMonitorState(workers.get(id));
   startPolling(id);
   broadcast({ type: "spawned", id, cwd, cmd, status: "running", sessionName, ...getMonitorMeta(workers.get(id)) });
+  broadcastUiEvent("tab_updated");
   return id;
 }
 
@@ -512,7 +761,12 @@ function pollOutput(id) {
     broadcast({ type: "cwd", id, cwd: currentCwd });
   }
   if (currentPaneCmd) {
+    const processChanged = w.lastPaneCommand !== currentPaneCmd;
     w.lastPaneCommand = currentPaneCmd;
+    if (processChanged) {
+      broadcast({ type: "process", id, processName: currentPaneCmd });
+      broadcastUiEvent("tab_updated");
+    }
     if (w.expectedCmd && currentPaneCmd === w.expectedCmd) w.seenExpectedCmd = true;
     const switchedToShell = w.seenExpectedCmd && currentPaneCmd !== w.expectedCmd && SHELL_COMMANDS.has(currentPaneCmd);
     if (switchedToShell && w.status !== "completed") {
@@ -773,6 +1027,210 @@ const server = http.createServer(async (req, res) => {
 
   if (!auth(req)) return json(res, 401, { error: "unauthorized" });
 
+  if (method === "GET" && url === "/api/sessions") {
+    return json(res, 200, buildUiApiPayload());
+  }
+
+  if (method === "POST" && url === "/api/session/create") {
+    const { ok, body } = await parseBody(req);
+    if (!ok || !body) return json(res, 400, { error: "invalid request body" });
+    const name = String(body.name || "").trim() || `Session ${nextSessionId}`;
+    const session = createUiSession(name);
+    createUiTab(session.id, "Tab 1");
+    persistUiSessions();
+    broadcastUiEvent("session_updated");
+    return json(res, 200, { ok: true, sessionId: session.id });
+  }
+
+  if (method === "POST" && url === "/api/session/rename") {
+    const { ok, body } = await parseBody(req);
+    if (!ok || !body) return json(res, 400, { error: "invalid request body" });
+    const session = getSessionOrNull(body.sessionId);
+    if (!session) return json(res, 404, { ok: false, error: "session not found" });
+    const name = String(body.name || "").trim();
+    if (!name) return json(res, 400, { ok: false, error: "name required" });
+    session.name = name;
+    persistUiSessions();
+    broadcastUiEvent("session_updated");
+    return json(res, 200, { ok: true });
+  }
+
+  if (method === "POST" && url === "/api/session/close") {
+    const { ok, body } = await parseBody(req);
+    if (!ok || !body) return json(res, 400, { error: "invalid request body" });
+    const session = getSessionOrNull(body.sessionId);
+    if (!session) return json(res, 404, { ok: false, error: "session not found" });
+    for (const tab of session.tabs.values()) {
+      for (const paneId of [...tab.paneIds]) {
+        const w = workers.get(String(paneId));
+        if (w) {
+          if (w.pollTimer) clearInterval(w.pollTimer);
+          cleanupPreviewPorts(String(paneId));
+          sessionStateManager.removeSession(w.sessionName);
+          tmuxExec("kill-session", "-t", w.sessionName);
+          workers.delete(String(paneId));
+          delete lastCapture[String(paneId)];
+        }
+      }
+    }
+    uiSessions.delete(session.id);
+    if (uiSessions.size === 0) ensureUiDefaults();
+    if (!activeUiSessionId || !uiSessions.has(activeUiSessionId)) {
+      activeUiSessionId = uiSessions.values().next().value.id;
+    }
+    persistUiSessions();
+    broadcastUiEvent("session_updated");
+    return json(res, 200, { ok: true });
+  }
+
+  if (method === "POST" && url === "/api/tab/create") {
+    const { ok, body } = await parseBody(req);
+    if (!ok || !body) return json(res, 400, { error: "invalid request body" });
+    const target = resolveUiTarget(body.sessionId || null, null);
+    if (!target.session) return json(res, 400, { ok: false, error: "session unavailable" });
+    const name = String(body.name || "").trim() || `Tab ${nextTabId}`;
+    const tab = createUiTab(target.session.id, name, body.layout || "single");
+    persistUiSessions();
+    broadcastUiEvent("tab_updated");
+    return json(res, 200, { ok: true, tabId: tab.id, sessionId: target.session.id });
+  }
+
+  if (method === "POST" && url === "/api/session/select") {
+    const { ok, body } = await parseBody(req);
+    if (!ok || !body) return json(res, 400, { error: "invalid request body" });
+    const session = getSessionOrNull(body.sessionId);
+    if (!session) return json(res, 404, { ok: false, error: "session not found" });
+    activeUiSessionId = session.id;
+    persistUiSessions();
+    broadcastUiEvent("session_updated");
+    return json(res, 200, { ok: true });
+  }
+
+  if (method === "POST" && url === "/api/tab/select") {
+    const { ok, body } = await parseBody(req);
+    if (!ok || !body) return json(res, 400, { error: "invalid request body" });
+    const session = getSessionOrNull(body.sessionId);
+    const tab = getTabOrNull(session, body.tabId);
+    if (!session || !tab) return json(res, 404, { ok: false, error: "tab not found" });
+    activeUiSessionId = session.id;
+    session.activeTabId = tab.id;
+    persistUiSessions();
+    broadcastUiEvent("tab_updated");
+    return json(res, 200, { ok: true });
+  }
+
+  if (method === "POST" && url === "/api/tab/layout") {
+    const { ok, body } = await parseBody(req);
+    if (!ok || !body) return json(res, 400, { error: "invalid request body" });
+    const session = getSessionOrNull(body.sessionId);
+    const tab = getTabOrNull(session, body.tabId);
+    if (!session || !tab) return json(res, 404, { ok: false, error: "tab not found" });
+    const nextLayout = String(body.layout || "");
+    if (!["single", "hsplit", "vsplit", "quad"].includes(nextLayout)) {
+      return json(res, 400, { ok: false, error: "invalid layout" });
+    }
+    tab.layout = nextLayout;
+    persistUiSessions();
+    broadcastUiEvent("tab_updated");
+    return json(res, 200, { ok: true });
+  }
+
+  if (method === "POST" && url === "/api/pane/focus") {
+    const { ok, body } = await parseBody(req);
+    if (!ok || !body) return json(res, 400, { error: "invalid request body" });
+    const session = getSessionOrNull(body.sessionId);
+    const tab = getTabOrNull(session, body.tabId);
+    const paneId = String(body.paneId || "");
+    if (!session || !tab || !tab.paneIds.includes(paneId)) {
+      return json(res, 404, { ok: false, error: "pane not found in tab" });
+    }
+    activeUiSessionId = session.id;
+    session.activeTabId = tab.id;
+    tab.activePaneId = paneId;
+    persistUiSessions();
+    broadcastUiEvent("tab_updated");
+    return json(res, 200, { ok: true });
+  }
+
+  if (method === "POST" && url === "/api/tab/rename") {
+    const { ok, body } = await parseBody(req);
+    if (!ok || !body) return json(res, 400, { error: "invalid request body" });
+    const session = getSessionOrNull(body.sessionId);
+    const tab = getTabOrNull(session, body.tabId);
+    if (!session || !tab) return json(res, 404, { ok: false, error: "tab not found" });
+    const name = String(body.name || "").trim();
+    if (!name) return json(res, 400, { ok: false, error: "name required" });
+    tab.name = name;
+    persistUiSessions();
+    broadcastUiEvent("tab_updated");
+    return json(res, 200, { ok: true });
+  }
+
+  if (method === "POST" && url === "/api/tab/close") {
+    const { ok, body } = await parseBody(req);
+    if (!ok || !body) return json(res, 400, { error: "invalid request body" });
+    const session = getSessionOrNull(body.sessionId);
+    const tab = getTabOrNull(session, body.tabId);
+    if (!session || !tab) return json(res, 404, { ok: false, error: "tab not found" });
+    for (const paneId of [...tab.paneIds]) {
+      const w = workers.get(String(paneId));
+      if (w) {
+        if (w.pollTimer) clearInterval(w.pollTimer);
+        cleanupPreviewPorts(String(paneId));
+        sessionStateManager.removeSession(w.sessionName);
+        tmuxExec("kill-session", "-t", w.sessionName);
+        workers.delete(String(paneId));
+        delete lastCapture[String(paneId)];
+      }
+    }
+    session.tabs.delete(tab.id);
+    if (session.tabs.size === 0) {
+      createUiTab(session.id, "Tab 1", "single");
+    }
+    if (!session.activeTabId || !session.tabs.has(session.activeTabId)) {
+      session.activeTabId = session.tabs.values().next().value.id;
+    }
+    persistUiSessions();
+    broadcastUiEvent("tab_updated");
+    return json(res, 200, { ok: true });
+  }
+
+  if (method === "POST" && url === "/api/pane/split") {
+    const { ok, body } = await parseBody(req);
+    if (!ok || !body) return json(res, 400, { error: "invalid request body" });
+    const session = getSessionOrNull(body.sessionId);
+    const tab = getTabOrNull(session, body.tabId);
+    if (!session || !tab) return json(res, 404, { ok: false, error: "tab not found" });
+    const sourceWorker = body.sourcePaneId ? workers.get(String(body.sourcePaneId)) : (tab.paneIds.length ? workers.get(String(tab.paneIds[0])) : null);
+    const cwd = sourceWorker?.cwd || body.cwd || process.cwd();
+    const cmd = body.cmd || sourceWorker?.cmd || appConfig.defaultCommand || "claude";
+    if (body.layout === "hsplit" || body.layout === "vsplit" || body.layout === "quad") {
+      tab.layout = body.layout;
+    }
+    const id = spawnWorker(cwd, cmd, session.id, tab.id);
+    persistUiSessions();
+    broadcastUiEvent("tab_updated");
+    return json(res, 200, { ok: true, paneId: id });
+  }
+
+  if (method === "POST" && url === "/api/pane/close") {
+    const { ok, body } = await parseBody(req);
+    if (!ok || !body) return json(res, 400, { error: "invalid request body" });
+    const id = String(body.paneId || body.id || "");
+    const w = workers.get(id);
+    if (!w) return json(res, 404, { ok: false, error: "pane not found" });
+    if (w.pollTimer) clearInterval(w.pollTimer);
+    cleanupPreviewPorts(id);
+    sessionStateManager.removeSession(w.sessionName);
+    tmuxExec("kill-session", "-t", w.sessionName);
+    detachPaneFromUi(id, { cleanupEmptyTab: false });
+    workers.delete(id);
+    delete lastCapture[id];
+    persistUiSessions();
+    broadcastUiEvent("tab_updated");
+    return json(res, 200, { ok: true });
+  }
+
   if (method === "GET" && url === "/api/workers") {
     const list = [...workers.entries()].map(([id, w]) => ({
       id,
@@ -783,6 +1241,9 @@ const server = http.createServer(async (req, res) => {
       logs: w.logs,
       aiState: w.aiState || null,
       exitReason: w.exitReason || null,
+      uiSessionId: w.uiSessionId || null,
+      uiTabId: w.uiTabId || null,
+      processName: w.lastPaneCommand || w.cmd || null,
       ...getMonitorMeta(w),
     }));
     return json(res, 200, list);
@@ -823,10 +1284,19 @@ const server = http.createServer(async (req, res) => {
       seenExpectedCmd: false,
       lastPaneCommand: null,
       lastAction: null,
+      uiSessionId: null,
+      uiTabId: null,
     });
+    const attached = attachPaneToUi(id, body.uiSessionId || null, body.uiTabId || null);
+    if (attached) {
+      const w = workers.get(id);
+      w.uiSessionId = attached.session.id;
+      w.uiTabId = attached.tab.id;
+    }
     initializeWorkerMonitorState(workers.get(id));
     startPolling(id);
     broadcast({ type: "spawned", id, cwd, status: "running", sessionName, ...getMonitorMeta(workers.get(id)) });
+    broadcastUiEvent("tab_updated");
     return json(res, 200, { id });
   }
 
@@ -843,7 +1313,7 @@ const server = http.createServer(async (req, res) => {
     } catch (e) {
       return json(res, 400, { ok: false, error: "Invalid path: does not exist or not accessible." });
     }
-    const id = spawnWorker(resolvedCwd, body.cmd);
+    const id = spawnWorker(resolvedCwd, body.cmd, body.uiSessionId || null, body.uiTabId || null);
     return json(res, 200, { ok: true, id });
   }
 
@@ -864,8 +1334,10 @@ const server = http.createServer(async (req, res) => {
       if (w.pollTimer) clearInterval(w.pollTimer);
       cleanupPreviewPorts(id);
       sessionStateManager.removeSession(w.sessionName);
+      detachPaneFromUi(id, { cleanupEmptyTab: true });
       workers.delete(id);
       delete lastCapture[id];
+      broadcastUiEvent("tab_updated");
     }
     return json(res, 200, { ok: true });
   }
@@ -1071,8 +1543,10 @@ wss.on('connection', (ws, req) => {
 
 
 function recoverSessions() {
+  ensureUiDefaults();
   const raw = tmuxExec("ls", "-F", "#{session_name}|#{pane_current_path}|#{pane_current_command}");
   if (!raw.trim()) return;
+  const recoveredIds = new Set();
   for (const line of raw.trim().split("\n")) {
     if (!line) continue;
     const parts = line.split("|");
@@ -1096,11 +1570,35 @@ function recoverSessions() {
       exitReason: null,
       lastPaneCommand: null,
       lastAction: null,
+      uiSessionId: null,
+      uiTabId: null,
     });
+    recoveredIds.add(id);
+    const existingLoc = findPaneLocation(id);
+    if (existingLoc) {
+      workers.get(id).uiSessionId = existingLoc.session.id;
+      workers.get(id).uiTabId = existingLoc.tab.id;
+      existingLoc.tab.activePaneId = existingLoc.tab.activePaneId || id;
+    } else {
+      const attached = attachPaneToUi(id, activeUiSessionId, null);
+      if (attached) {
+        workers.get(id).uiSessionId = attached.session.id;
+        workers.get(id).uiTabId = attached.tab.id;
+      }
+    }
     initializeWorkerMonitorState(workers.get(id));
     startPolling(id);
     if (numId >= nextId) nextId = numId + 1;
   }
+  for (const session of uiSessions.values()) {
+    for (const tab of session.tabs.values()) {
+      tab.paneIds = tab.paneIds.filter((paneId) => recoveredIds.has(String(paneId)));
+      if (tab.activePaneId && !tab.paneIds.includes(String(tab.activePaneId))) {
+        tab.activePaneId = tab.paneIds[0] || null;
+      }
+    }
+  }
+  persistUiSessions();
   if (workers.size > 0) {
     console.log(`♻️  Recovered ${workers.size} session(s)`);
   }
