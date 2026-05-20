@@ -75,3 +75,18 @@ test("hydrateWorker uses legacy flags when monitorMode is absent", () => {
   assert.equal(w.autoMode, false);
   try { fs.unlinkSync(filePath); } catch {}
 });
+
+test("lastMatchedLine is persisted and hydrated correctly", async () => {
+  const filePath = tmpPath();
+  const mgr1 = createSessionStateManager({ stateFilePath: filePath });
+  const w1 = { sessionName: "term-1" };
+  mgr1.updateMatch(w1, { matched: true, patternName: "proceed", matchedLine: "Do you want to proceed? [y/N]", excerpt: "some long buffer" });
+  await new Promise(r => setTimeout(r, 600));
+
+  const mgr2 = createSessionStateManager({ stateFilePath: filePath });
+  const w2 = { sessionName: "term-1" };
+  mgr2.hydrateWorker(w2);
+  assert.equal(w2.lastMatchedLine, "Do you want to proceed? [y/N]");
+  assert.equal(w2.lastPromptExcerpt, "some long buffer");
+  try { fs.unlinkSync(filePath); } catch {}
+});

@@ -89,3 +89,12 @@ test("parseResetEpoch - absolute with UTC offset timezone (UTC-8)", () => {
   const expected = todayAt11UTC - (-480) * 60000; // subtract UTC-8 offset (-480 min) → +8 h → 19:00 UTC same day
   assert.equal(parseResetEpoch("11:00 AM UTC-8", NOW), expected);
 });
+
+test("parseResetEpoch - absolute with Asia/Bangkok IANA timezone", () => {
+  // "12:20am (Asia/Bangkok)" = 17:20 UTC (previous day relative to the local date, but future relative to NOW)
+  // NOW is 2025-05-19 18:00:00 UTC = 2025-05-20 01:00:00 Asia/Bangkok
+  // 12:20am Bangkok time on May 20 is already in the past (00:20 < 01:00).
+  // So it wraps to May 21 00:20 Asia/Bangkok = May 20 17:20 UTC.
+  const expected = Date.UTC(2025, 4, 20, 17, 20, 0, 0);
+  assert.equal(parseResetEpoch("12:20am (Asia/Bangkok)", NOW), expected);
+});

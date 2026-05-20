@@ -370,7 +370,7 @@ function trimPrompt(prompt) {
 
 function updateMonitorMeta(id, meta) {
   const activity = formatMetaTime(meta.lastActivityAt);
-  const prompt = trimPrompt(meta.lastPromptExcerpt || meta.matchedText);
+  const prompt = trimPrompt(meta.lastMatchedLine || meta.lastPromptExcerpt || meta.matchedText);
   const status = meta.notificationStatus || '-';
   const notifyAt = formatMetaTime(meta.lastNotificationAt);
 
