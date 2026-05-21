@@ -195,6 +195,9 @@ function ensureCard(id, cwd, status, logs, cmd, reason, monitorMeta) {
   const logsBox = document.getElementById('logs-' + id);
   if (logsBox) {
     initLogScrollLock(logsBox);
+    if (window.resizeObserver) {
+      window.resizeObserver.observe(logsBox);
+    }
   }
   if (logs) logs.forEach(l => appendLog(id, l.src, l.text));
   if (reason) updateExitReason(id, reason);
@@ -504,6 +507,11 @@ function removeWorker(id) {
   apiPost('/api/remove', { id });
   removePreviewTabs(id);
   if (typeof closeGitDiff === 'function') closeGitDiff(id);
+
+  const logsBox = document.getElementById('logs-' + id);
+  if (logsBox && window.resizeObserver) {
+    window.resizeObserver.unobserve(logsBox);
+  }
 
   const panel = document.querySelector('.tab-panel[data-id="' + id + '"]');
   if (panel) panel.remove();

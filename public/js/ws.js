@@ -97,6 +97,21 @@ function scheduleSendResize() {
   _resizeTimer = setTimeout(sendResize, 120);
 }
 
+if (typeof ResizeObserver !== 'undefined') {
+  window.resizeObserver = new ResizeObserver(entries => {
+    let shouldResize = false;
+    for (const entry of entries) {
+      if (entry.contentRect.width > 0 && entry.contentRect.height > 0) {
+        shouldResize = true;
+        break;
+      }
+    }
+    if (shouldResize) {
+      scheduleSendResize();
+    }
+  });
+}
+
 // ── API Calls ──
 
 function apiPost(url, body) {

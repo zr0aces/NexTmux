@@ -287,6 +287,35 @@ function sendWaitingAlert(id, detection, now = Date.now()) {
 
 const lastCapture = new Map(); // workerId → last captured tmux output string
 
+async function resizeWorker(id, cols, rows) {
+  const w = workers.get(String(id));
+  if (!w) return;
+  w.cols = cols;
+  w.rows = rows;
+  
+  if (!isAlive(w.sessionName)) return;
+
+  const c = cols || 80;
+  const r = rows || 50;
+
+  if (c !== w._lastCols || r !== w._lastRows) {
+    tmuxExec("resize-pane", "-t", w.sessionName, "-x", String(c), "-y", String(r));
+    tmuxExec("resize-window", "-t", w.sessionName, "-x", String(c), "-y", String(r));
+    w._lastCols = c;
+    w._lastRows = r;
+  }
+
+  try {
+    const output = await tmuxExecAsync("capture-pane", "-t", w.sessionName, "-p", "-S", "-500", "-J");
+    lastCapture.set(String(id), output);
+    const lines = output.split("\n");
+    w.logs = lines.slice(-200).map(text => ({ src: "stdout", text, ts: Date.now() }));
+    broadcast({ type: "snapshot", id: String(id), lines });
+  } catch (e) {
+    console.error("Failed to capture pane after resize:", e);
+  }
+}
+
 async function pollOutput(id) {
   const w = workers.get(id);
   if (!w || w._polling) return;  // skip if a previous poll cycle hasn't finished
@@ -912,16 +941,20 @@ wss.on('connection', (ws, req) => {
         const size = { cols: msg.cols, rows: msg.rows };
         clientSizes.set(ws, size);
         if (msg.id && workers.has(String(msg.id))) {
-          const w = workers.get(String(msg.id));
-          w.cols = size.cols;
-          w.rows = size.rows;
+          resizeWorker(String(msg.id), size.cols, size.rows);
         } else {
-          workers.forEach(w => { w.cols = size.cols; w.rows = size.rows; });
+          workers.forEach(w => {
+            resizeWorker(w.id, size.cols, size.rows);
+          });
         }
       }
       if (msg.type === 'active') {
         const size = clientSizes.get(ws);
-        if (size) workers.forEach(w => { w.cols = size.cols; w.rows = size.rows; });
+        if (size) {
+          workers.forEach(w => {
+            resizeWorker(w.id, size.cols, size.rows);
+          });
+        }
       }
     } catch (e) {}
   });
