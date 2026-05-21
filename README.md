@@ -77,7 +77,7 @@ tmux kill-session -t term-1
   - ⚡ **Auto Mode** — Sends `y` (or `1` when prompts display `1. yes`) and auto-selects `1. Stop and wait for limit to reset` for `/rate-limit-options`.
   - ♻️ **Rate-Limit Auto-Recovery** — When reset time is parseable, waiting workers auto-return to running; Auto Mode sends `continue` after reset.
 - **Telegram & Discord Alerts** — Outbound webhook alerts when an AI CLI halts and requires human permission.
-- **Quick Controls** — Split/Tab layout toggles, favorites directory access, and an integrated virtual developer keyboard.
+- **Quick Controls** — Split/Tab layout toggles, favorites directory access, an integrated virtual developer keyboard, and terminal log scroll lock for freeze-frame history reading.
 
 ---
 
