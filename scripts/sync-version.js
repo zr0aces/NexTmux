@@ -90,9 +90,12 @@ if (fs.existsSync(indexHtmlPath)) {
   
   // Replace login-version display badge: <span class="login-version">v...</span>
   updatedHtml = updatedHtml.replace(/(class="login-version">)v[^<]+/g, `$1v${version}`);
+
+  // Replace app-version display badge: <span class="app-version">v...</span>
+  updatedHtml = updatedHtml.replace(/(class="app-version">)v[^<]+/g, `$1v${version}`);
   
   fs.writeFileSync(indexHtmlPath, updatedHtml, 'utf8');
-  console.log('✅ Updated index.html asset cachebusters and login version badge');
+  console.log('✅ Updated index.html asset cachebusters, login version badge, and app version badge');
 }
 
 console.log(`🎉 Version sync complete! Version is now v${version}`);

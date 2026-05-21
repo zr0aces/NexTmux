@@ -89,6 +89,20 @@ header h1 {
   margin: 0;
 }
 
+.app-version {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  padding: 1px 5px;
+  letter-spacing: 0;
+  display: inline-block;
+  user-select: none;
+}
+
 #status-dot {
   width: 8px;
   height: 8px;
