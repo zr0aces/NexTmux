@@ -205,4 +205,25 @@ test("Integration tests for TmuxHub API", async (t) => {
     const names = scanRes.body.map(s => s.sessionName);
     assert.ok(names.includes("term-1"));
   });
+
+  // 5. Reset test
+  await t.test("POST /api/reset should reset worker monitoring state and re-catch", async () => {
+    // Let's reset term-2
+    const workersList = await request("GET", "/api/workers");
+    const term2Worker = workersList.body.find(w => w.sessionName === "term-2");
+    assert.ok(term2Worker);
+    const term2Id = term2Worker.id;
+
+    // Call reset
+    const resetRes = await request("POST", "/api/reset", { id: term2Id });
+    assert.equal(resetRes.status, 200);
+    assert.equal(resetRes.body.ok, true);
+
+    // Get workers again and check if it was reset
+    const workersAfter = await request("GET", "/api/workers");
+    const term2WorkerAfter = workersAfter.body.find(w => w.sessionName === "term-2");
+    assert.ok(term2WorkerAfter);
+    assert.equal(term2WorkerAfter.status, "running");
+    assert.equal(term2WorkerAfter.aiState || null, null);
+  });
 });

@@ -747,6 +747,54 @@ const server = http.createServer(async (req, res) => {
     return json(res, 200, { ok: false });
   }
 
+  if (method === "POST" && url === "/api/reset") {
+    const { ok, body } = await parseBody(req);
+    if (!ok || !body) return json(res, 400, { error: "invalid request body" });
+    const { id } = body;
+    const w = workers.get(id);
+    if (!w) return json(res, 404, { ok: false });
+    if (isAlive(w.sessionName)) {
+      if (w.pollTimer) clearInterval(w.pollTimer);
+      
+      // 1. Remove session from sessionStateManager snapshot on disk
+      sessionStateManager.removeSession(w.sessionName);
+      
+      // 2. Reset worker in-memory tracking & AI monitoring properties
+      w.status = "running";
+      w.aiState = null;
+      w.exitReason = null;
+      w.seenExpectedCmd = false;
+      w.lastPaneCommand = null;
+      w.lastAction = null;
+      w.tokenResetAt = null;
+      w.resetAtEpochMs = null;
+      w.lastRateLimitAbsLine = undefined;
+      w.lastAutoResponseKey = null;
+      w.notifiedMessageHashes = [];
+      w.sentNotificationKeys = new Set();
+      w.logs = [];
+
+      // 3. Clear cached last capture to force re-reading the whole tmux pane
+      lastCapture.delete(id);
+
+      // 4. Update the state in the sessionStateManager
+      sessionStateManager.setWaitingState(w, "running");
+      sessionStateManager.clearResetEpoch(w);
+
+      // 5. Restart polling
+      startPolling(id);
+
+      // 6. Broadcast all changes to the client
+      broadcast({ type: "status", id, status: "running", reason: null });
+      broadcast({ type: "aiState", id, state: "running" });
+      broadcast({ type: "snapshot", id, lines: [] });
+      broadcastMonitorMeta(id);
+
+      return json(res, 200, { ok: true });
+    }
+    return json(res, 200, { ok: false, error: "tmux session not alive" });
+  }
+
   if (method === "POST" && url === "/api/toggle-ai-monitor") {
     const { ok, body } = await parseBody(req);
     if (!ok || !body) return json(res, 400, { error: "invalid request body" });

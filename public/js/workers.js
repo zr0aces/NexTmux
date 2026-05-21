@@ -104,6 +104,7 @@ function ensureCard(id, cwd, status, logs, cmd, reason, monitorMeta) {
           '</div>' +
         '</div>' +
         '<button class="diff-btn" id="diff-' + id + '" title="Git Diff">Diff</button>' +
+        '<button class="reset-btn" id="reset-' + id + '" title="Reset State & Re-catch Session">Reset</button>' +
         killBtnHtml(id, status) +
       '</div>' +
     '</div>' +
@@ -181,11 +182,13 @@ function ensureCard(id, cwd, status, logs, cmd, reason, monitorMeta) {
 
   selectTab(id);
 
-  if (status === 'stopped') {
+  if (status === 'stopped' || status === 'completed') {
     const btn = document.getElementById('kill-' + id);
     if (btn) btn.onclick = () => removeWorker(id);
     const el = document.getElementById('input-row-' + id);
     if (el) el.style.display = 'none';
+    const resetBtn = document.getElementById('reset-' + id);
+    if (resetBtn) resetBtn.style.display = 'none';
   }
 
   renderTitle(id, cwd, cmdLabel);
@@ -211,6 +214,9 @@ function bindCard(id, root) {
   const diffBtn = q('#diff-' + id);
   if (diffBtn) diffBtn.addEventListener('click', () => openGitDiff(id));
 
+  const resetBtn = q('#reset-' + id);
+  if (resetBtn) resetBtn.addEventListener('click', () => resetWorkerState(id));
+ 
   if (killBtn) killBtn.addEventListener('click', () => killWorker(id));
   if (sendBtn) sendBtn.addEventListener('click', () => sendInput(id));
   if (monitorModeSelector) monitorModeSelector.addEventListener('change', (e) => setMonitorMode(id, e.target.value));
@@ -382,6 +388,8 @@ function updateStatus(id, status, reason) {
     }
     const elInputRow = document.getElementById('input-row-' + id);
     if (elInputRow) elInputRow.style.display = 'none';
+    const resetBtn = document.getElementById('reset-' + id);
+    if (resetBtn) resetBtn.style.display = 'none';
   }
   if (status === 'running') {
     updateExitReason(id, null);
@@ -397,6 +405,8 @@ function updateStatus(id, status, reason) {
     }
     const elInputRow = document.getElementById('input-row-' + id);
     if (elInputRow) elInputRow.style.display = '';
+    const resetBtn = document.getElementById('reset-' + id);
+    if (resetBtn) resetBtn.style.display = '';
   }
 }
 
@@ -558,6 +568,18 @@ function sendQuickCommand(id, text) {
 function killWorker(id) {
   if (!confirm('Stop Worker #' + id + '?')) return;
   apiPost('/api/kill', { id });
+}
+
+function resetWorkerState(id) {
+  if (!confirm('Reset monitoring state and re-catch session #' + id + '?')) return;
+  apiPost('/api/reset', { id })
+    .then(r => r.json().catch(() => ({})).then(d => ({ ok: r.ok, d })))
+    .then(({ ok, d }) => {
+      if (!ok || d.ok === false) {
+        alert(d.error || 'Failed to reset state.');
+      }
+    })
+    .catch(() => { alert('Failed to reset state.'); });
 }
 
 function setMonitorMode(id, mode) {
