@@ -1,7 +1,6 @@
 require("dotenv").config();
 const http = require("http");
 const net = require("net");
-const crypto = require("crypto");
 const { execSync, execFileSync, spawn } = require("child_process");
 const fs = require("fs");
 const path = require("path");
@@ -11,6 +10,26 @@ const { createTelegramService } = require("./lib/telegramService");
 const { createSessionStateManager } = require("./lib/sessionStateManager");
 const { createWatcherEngine, getNewLinesCount, cleanRateLimitLine } = require("./lib/watcherEngine");
 const { createMessageProcessor, RATE_LIMIT_PATTERN_NAMES } = require("./lib/messageProcessor");
+
+const { sanitizeSessionName, tmuxExec, tmuxExecAsync, isAlive } = require("./lib/tmuxService");
+const {
+  SESSION_TTL_MS,
+  timingSafePasswordMatch,
+  createSession,
+  auth,
+  buildAuthCookie,
+  isLoginRateLimited,
+  recordFailedLogin,
+  clearFailedLogin,
+} = require("./lib/authService");
+const {
+  detectPorts,
+  cleanupPreviewPorts,
+  startPreviewTunnel,
+  detectedPorts,
+  previewTunnels,
+  checkPortListening,
+} = require("./lib/portDetector");
 
 const PORT = process.env.PORT || 8081;
 const PASSWORD = process.env.DASHBOARD_PASSWORD || "changeme";
@@ -25,18 +44,12 @@ const TELEGRAM_CHAT_ID = process.env.TELEGRAM_CHAT_ID;
 // ENABLE_TUNNEL: env takes precedence; config fallback resolved after loadConfig()
 // Resolved into TUNNEL_ENABLED below, after appConfig is loaded.
 
-// workerId (string) → Set<number> : ports detected per worker
-const detectedPorts = new Map();
-// port (number) → { process, url } : cloudflared tunnel state per port
-const previewTunnels = new Map();
-// Regex for detecting localhost port references in terminal output
-const PORT_PATTERN = /(?:https?:\/\/)?(?:localhost|127\.0\.0\.1):(\d{2,5})/g;
+
 
 if (PASSWORD === "changeme") {
   console.warn("⚠️  Using default password. Please set DASHBOARD_PASSWORD environment variable.");
 }
 
-const sessions = new Map();
 const workers = new Map();
 let nextId = 1;
 let tunnelUrl = null;
@@ -47,106 +60,7 @@ const ACTION_WINDOW_MS = 7000;
 const SHELL_COMMANDS = new Set(["bash", "zsh", "sh", "fish"]);
 const issueAlertTime = new Map(); // key: alert key, value: timestamp
 const ISSUE_ALERT_COOLDOWN_MS = 120000; // 120s cooldown per issue key
-const LOGIN_WINDOW_MS = 10 * 60 * 1000;
-const MAX_LOGIN_ATTEMPTS = 20;
-const TRUST_PROXY = process.env.TRUST_PROXY === "1";
-const SESSION_TTL_MS = Math.max(60000, Number(process.env.SESSION_TTL_MS) || 7 * 24 * 60 * 60 * 1000);
-const loginAttempts = new Map();
 const RATE_LIMIT_PATTERNS = RATE_LIMIT_PATTERN_NAMES;
-
-function createToken() {
-  return crypto.randomBytes(32).toString("hex");
-}
-
-function getClientIp(req) {
-  const forwarded = req.headers["x-forwarded-for"];
-  if (TRUST_PROXY && typeof forwarded === "string" && forwarded.trim()) return forwarded.split(",")[0].trim();
-  return req.socket?.remoteAddress || "unknown";
-}
-
-function timingSafePasswordMatch(candidate) {
-  const expected = Buffer.from(String(PASSWORD || ""), "utf8");
-  const provided = Buffer.from(String(candidate || ""), "utf8");
-  if (provided.length !== expected.length) return false;
-  return crypto.timingSafeEqual(provided, expected);
-}
-
-function trimSessions(now = Date.now()) {
-  for (const [token, meta] of sessions) {
-    if (!meta || typeof meta.expiresAt !== "number" || now > meta.expiresAt) {
-      sessions.delete(token);
-    }
-  }
-}
-
-function createSession() {
-  const token = createToken();
-  sessions.set(token, { expiresAt: Date.now() + SESSION_TTL_MS });
-  return token;
-}
-
-function trimLoginAttempts(now = Date.now()) {
-  for (const [ip, state] of loginAttempts) {
-    if (!state || now > state.resetAt) loginAttempts.delete(ip);
-  }
-}
-
-function isLoginRateLimited(req) {
-  const now = Date.now();
-  trimLoginAttempts(now);
-  const ip = getClientIp(req);
-  const state = loginAttempts.get(ip);
-  if (!state) return false;
-  if (now > state.resetAt) {
-    loginAttempts.delete(ip);
-    return false;
-  }
-  return state.count >= MAX_LOGIN_ATTEMPTS;
-}
-
-function recordFailedLogin(req) {
-  const now = Date.now();
-  const ip = getClientIp(req);
-  const state = loginAttempts.get(ip);
-  if (!state || now > state.resetAt) {
-    loginAttempts.set(ip, { count: 1, resetAt: now + LOGIN_WINDOW_MS });
-    return;
-  }
-  state.count += 1;
-}
-
-function clearFailedLogin(req) {
-  loginAttempts.delete(getClientIp(req));
-}
-
-function buildAuthCookie(req, token) {
-  const isSecure = req.socket?.encrypted || req.headers["x-forwarded-proto"] === "https";
-  const secure = isSecure ? "; Secure" : "";
-  return `token=${token}; Path=/; HttpOnly; SameSite=Strict${secure}`;
-}
-
-function sanitizeSessionName(name) {
-  if (typeof name !== "string" || !/^[a-zA-Z0-9_:-]+$/.test(name)) {
-    throw new Error(`Unsafe tmux session name rejected: ${JSON.stringify(name)}`);
-  }
-  return name;
-}
-
-function isAlive(sessionName) {
-  try {
-    execFileSync("tmux", ["has-session", "-t", sessionName], { encoding: "utf8", stdio: "pipe" });
-    return true;
-  } catch (e) {
-    return false;
-  }
-}
-
-// Safe alternative: spawn tmux with explicit arg array — no shell interpretation.
-// Use for all calls that include user-supplied values (sessionName, cwd, cmd, key).
-function tmuxExec(...args) {
-  try { return execFileSync("tmux", args, { encoding: "utf8", stdio: "pipe" }); }
-  catch (e) { return ""; }
-}
 
 function loadConfig() {
   const configPath = path.join(__dirname, "config.json");
@@ -239,102 +153,7 @@ function inferExitReason(w, fallback) {
   return fallback || "Session exited (reason unknown).";
 }
 
-// Well-known infrastructure service ports — excluded from preview detection to avoid false positives
-const EXCLUDED_PORTS = new Set([
-  3306,  // MySQL
-  5432,  // PostgreSQL
-  5433,  // PostgreSQL (alt)
-  27017, // MongoDB
-  27018, 27019,
-  6379,  // Redis
-  6380,
-  5672,  // RabbitMQ
-  15672, // RabbitMQ management
-  9200,  // Elasticsearch
-  9300,
-  2181,  // ZooKeeper
-  2375,  // Docker daemon
-  2376,
-]);
 
-function checkPortListening(port) {
-  function tryConnect(host) {
-    return new Promise((resolve) => {
-      const sock = new net.Socket();
-      sock.setTimeout(500);
-      sock.once("connect", () => { sock.destroy(); resolve(true); });
-      sock.once("error", () => resolve(false));
-      sock.once("timeout", () => { sock.destroy(); resolve(false); });
-      sock.connect(port, host);
-    });
-  }
-  return tryConnect("127.0.0.1").then((ok) => ok ? true : tryConnect("::1"));
-}
-
-// Content-Type check: HTML responses are treated as web app frontends
-function checkContentType(port) {
-  return new Promise((resolve) => {
-    const req = http.get({ hostname: "127.0.0.1", port, path: "/", timeout: 2000 }, (res) => {
-      const ct = (res.headers["content-type"] || "").toLowerCase();
-      res.resume(); // consume response body to prevent memory leak
-      resolve(ct.includes("text/html") ? "html" : ct || "unknown");
-    });
-    req.on("error", () => resolve("error"));
-    req.on("timeout", () => { req.destroy(); resolve("timeout"); });
-  });
-}
-
-// Ports detected in output but not yet confirmed as listening (per worker)
-const pendingPorts = new Map(); // id → Set<port>
-
-function detectPorts(id, output) {
-  if (!ENABLE_PREVIEW) return;
-  const matches = [...output.matchAll(PORT_PATTERN)];
-  if (!matches.length && (!pendingPorts.has(id) || !pendingPorts.get(id).size)) return;
-
-  if (!detectedPorts.has(id)) detectedPorts.set(id, new Set());
-  if (!pendingPorts.has(id)) pendingPorts.set(id, new Set());
-  const portSet = detectedPorts.get(id);
-  const pending = pendingPorts.get(id);
-
-  // Add newly detected ports to the pending set
-  for (const m of matches) {
-    const port = parseInt(m[1], 10);
-    if (port < 1024 || port > 65535) continue;
-    if (port === Number(PORT)) continue;
-    if (EXCLUDED_PORTS.has(port)) continue;
-    if (portSet.has(port)) continue;
-    pending.add(port);
-  }
-
-  // Check whether each pending port is actually listening
-  for (const port of [...pending]) {
-    pending.delete(port);
-    checkPortListening(port).then((listening) => {
-      if (!listening) {
-        pending.add(port);
-        return;
-      }
-      if (portSet.has(port)) return;
-      portSet.add(port);
-
-      // Skip if another worker already detected and broadcast this port
-      for (const [wid, pset] of detectedPorts) {
-        if (wid !== id && pset.has(port)) return;
-      }
-
-      // Auto-preview HTML ports; prompt the user for non-HTML ports
-      checkContentType(port).then((ct) => {
-        if (ct === "html") {
-          broadcast({ type: "preview_detected", workerId: id, port });
-        } else {
-          broadcast({ type: "preview_prompt", workerId: id, port, contentType: ct });
-        }
-        if (PREVIEW_TUNNEL) startPreviewTunnel(port);
-      });
-    });
-  }
-}
 
 function startPolling(id) {
   const w = workers.get(id);
@@ -466,11 +285,13 @@ function sendWaitingAlert(id, detection, now = Date.now()) {
   });
 }
 
-let lastCapture = {};
+const lastCapture = new Map(); // workerId → last captured tmux output string
 
-function pollOutput(id) {
+async function pollOutput(id) {
   const w = workers.get(id);
-  if (!w) return;
+  if (!w || w._polling) return;  // skip if a previous poll cycle hasn't finished
+  w._polling = true;
+  try {
   if (!isAlive(w.sessionName)) {
     if (w.pollTimer) clearInterval(w.pollTimer);
     w.pollTimer = null;
@@ -491,12 +312,12 @@ function pollOutput(id) {
     w._lastCols = cols;
     w._lastRows = rows;
   }
-  const output = tmuxExec("capture-pane", "-t", w.sessionName, "-p", "-S", "-500", "-J");
-  const newLinesCount = getNewLinesCount(output, lastCapture[id]);
+  const output = await tmuxExecAsync("capture-pane", "-t", w.sessionName, "-p", "-S", "-500", "-J");
+  const newLinesCount = getNewLinesCount(output, lastCapture.get(id));
   w.totalLinesCount = (w.totalLinesCount || 0) + newLinesCount;
 
-  // Fetch cwd and pane command in a single tmux call (saves one sub-process per poll)
-  const _info = tmuxExec("display-message", "-t", w.sessionName, "-p", "#{pane_current_path}|||#{pane_current_command}").trim().split("|||");
+  // Fetch cwd and pane command in a single async tmux call (saves one sub-process per poll)
+  const _info = (await tmuxExecAsync("display-message", "-t", w.sessionName, "-p", "#{pane_current_path}|||#{pane_current_command}")).trim().split("|||");
   const currentCwd = _info[0] || "";
   const currentPaneCmd = _info[1] || "";
   if (currentCwd && currentCwd !== w.cwd) {
@@ -552,7 +373,7 @@ function pollOutput(id) {
   }
 
   const inspectOutput = cleanRateLimitLine(output, w.totalLinesCount, w.lastRateLimitAbsLine);
-  const previousInspectOutput = cleanRateLimitLine(lastCapture[id], (w.totalLinesCount || 0) - newLinesCount, w.lastRateLimitAbsLine);
+  const previousInspectOutput = cleanRateLimitLine(lastCapture.get(id), (w.totalLinesCount || 0) - newLinesCount, w.lastRateLimitAbsLine);
 
   const inspect = w.aiMonitorEnabled && monitorConfig.enabled
     ? watcherEngine.inspect({
@@ -566,10 +387,10 @@ function pollOutput(id) {
 
   // Output unchanged — pending port detection retry
   if (!inspect.changed) {
-    detectPorts(id, output);
+    if (ENABLE_PREVIEW) detectPorts(id, output, PORT, PREVIEW_TUNNEL, broadcast);
   } else {
-    lastCapture[id] = output;
-    detectPorts(id, output);
+    lastCapture.set(id, output);
+    if (ENABLE_PREVIEW) detectPorts(id, output, PORT, PREVIEW_TUNNEL, broadcast);
     w.lastChangeTime = now;
     sessionStateManager.updateActivity(w, now);
     const lines = output.split("\n");
@@ -631,6 +452,11 @@ function pollOutput(id) {
   }
 
   broadcastMonitorMeta(id);
+  } catch (e) {
+    // Swallow poll errors to prevent the interval from dying silently
+  } finally {
+    if (w) w._polling = false;
+  }
 }
 
 function sendInput(id, text) {
@@ -708,16 +534,7 @@ function json(res, code, obj) {
   res.end(JSON.stringify(obj));
 }
 
-function auth(req) {
-  trimSessions();
-  const cookie = req.headers.cookie || "";
-  const token = cookie.split(";").map(s => s.trim()).find(s => s.startsWith("token="))?.slice(6);
-  if (!token) return false;
-  const meta = sessions.get(token);
-  if (!meta) return false;
-  meta.expiresAt = Date.now() + SESSION_TTL_MS;
-  return true;
-}
+
 
 const server = http.createServer(async (req, res) => {
   const { method } = req;
@@ -732,7 +549,7 @@ const server = http.createServer(async (req, res) => {
     if (isLoginRateLimited(req)) return json(res, 429, { ok: false, error: "too_many_attempts" });
     const { ok, body } = await parseBody(req);
     if (!ok || !body) return json(res, 400, { error: "invalid request body" });
-    if (timingSafePasswordMatch(body.pw)) {
+    if (timingSafePasswordMatch(PASSWORD, body.pw)) {
       const token = createSession();
       clearFailedLogin(req);
       res.writeHead(200, { "Set-Cookie": buildAuthCookie(req, token), "Content-Type": "application/json" });
@@ -883,7 +700,7 @@ const server = http.createServer(async (req, res) => {
       cleanupPreviewPorts(id);
       sessionStateManager.removeSession(w.sessionName);
       workers.delete(id);
-      delete lastCapture[id];
+      lastCapture.delete(id);
     }
     return json(res, 200, { ok: true });
   }
@@ -1091,6 +908,7 @@ wss.on('connection', (ws, req) => {
 function recoverSessions() {
   const raw = tmuxExec("ls", "-F", "#{session_name}|#{pane_current_path}|#{pane_current_command}");
   if (!raw.trim()) return;
+  const recovered = [];
   for (const line of raw.trim().split("\n")) {
     if (!line) continue;
     const parts = line.split("|");
@@ -1118,9 +936,16 @@ function recoverSessions() {
     initializeWorkerMonitorState(workers.get(id));
     startPolling(id);
     if (numId >= nextId) nextId = numId + 1;
+    recovered.push(id);
   }
-  if (workers.size > 0) {
-    console.log(`♻️  Recovered ${workers.size} session(s)`);
+  if (recovered.length > 0) {
+    console.log(`♻️  Recovered ${recovered.length} session(s)`);
+    // Broadcast spawned events so already-connected clients (e.g. fast
+    // reconnect after crash-restart) see recovered sessions without a page reload.
+    recovered.forEach(id => {
+      const w = workers.get(id);
+      if (w) broadcast({ type: "spawned", id, cwd: w.cwd, cmd: w.cmd, status: "running", sessionName: w.sessionName, ...getMonitorMeta(w) });
+    });
   }
 }
 
@@ -1190,72 +1015,7 @@ function startTunnel() {
   });
 }
 
-function startPreviewTunnel(port) {
-  // Avoid spawning a duplicate tunnel for this port
-  if (previewTunnels.has(port)) return;
 
-  try {
-    execSync("which cloudflared", { stdio: "pipe" });
-  } catch {
-    console.log(`☁️  cloudflared not found — cannot start preview tunnel for port ${port}`);
-    return;
-  }
-
-  console.log(`☁️  Starting preview tunnel for port ${port}...`);
-  const proc = spawn("cloudflared", ["tunnel", "--url", `http://localhost:${port}`], {
-    stdio: ["ignore", "pipe", "pipe"],
-  });
-
-  // Register in the Map immediately to prevent duplicate spawns
-  previewTunnels.set(port, { process: proc, url: null });
-
-  const handleData = (data) => {
-    const text = data.toString();
-    const matches = [...text.matchAll(/https:\/\/([a-z0-9-]+)\.trycloudflare\.com/gi)];
-    const valid = matches.find((m) => m[1] && m[1].toLowerCase() !== "api");
-    if (valid) {
-      const url = valid[0];
-      const entry = previewTunnels.get(port);
-      if (entry && entry.url !== url) {
-        entry.url = url;
-        console.log(`☁️  Preview tunnel port ${port} → ${url}`);
-        broadcast({ type: "preview_tunnel", port, url });
-      }
-    }
-  };
-
-  proc.stdout.on("data", handleData);
-  proc.stderr.on("data", handleData);
-  proc.on("close", () => {
-    previewTunnels.delete(port);
-  });
-}
-
-function cleanupPreviewPorts(workerId) {
-  const portSet = detectedPorts.get(workerId);
-  if (!portSet) return;
-
-  for (const port of portSet) {
-    // Check whether another worker is still using this port
-    let usedByOther = false;
-    for (const [wid, pset] of detectedPorts) {
-      if (wid !== workerId && pset.has(port)) {
-        usedByOther = true;
-        break;
-      }
-    }
-    if (!usedByOther) {
-      const tunnel = previewTunnels.get(port);
-      if (tunnel) {
-        tunnel.process.kill();
-        previewTunnels.delete(port);
-      }
-    }
-  }
-
-  detectedPorts.delete(workerId);
-  pendingPorts.delete(workerId);
-}
 
 function checkTunnel() {
   if (!cachedTunnelUrl || !tunnelProcess) return;

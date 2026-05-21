@@ -56,19 +56,21 @@ graph TD
 ```
 
 ### 2.1 Backend Server (`server.js`)
-The backend is a single-file Node.js server written using core standard libraries (`http`, `net`, `crypto`, `child_process`, `fs`, `path`).
+The backend server (`server.js`) acts as the central router and coordinator. It integrates the modular services from `lib/` using core standard libraries (`http`, `net`, `fs`, `path`).
 * **HTTP Server**: Serves static frontend assets (`index.html`, client JS, and CSS) and handles REST API requests.
 * **WebSocket Server (via `ws`)**: Manages active connections, broadcasting shell logs, worker status, CWD changes, and tunnel URLs to clients.
-* **State Management**: Uses in-memory `Map` data structures (`workers`, `sessions`, `detectedPorts`, `previewTunnels`) synced periodically to filesystem storage.
-* **Subprocess Execution**: Calls `execFileSync` for safety when spawning shell actions with user arguments, and `spawn` to manage `cloudflared` tunnels.
+* **State Management**: Orchestrates worker states and references configuration/active sessions across user interactions.
 
 ### 2.2 Server-Side Helper Modules (`lib/`)
-The backend relies on isolated modules to implement the state machine and external alerts:
-1. **`patternEngine.js`**: Core regular expression analyzer. Compiled regexes check shell history to detect active requests or rate-limit warnings. It parses complex reset strings (relative times like `3h 15m` or absolute timestamps like `12:20am (Asia/Bangkok)`) into UTC milliseconds.
-2. **`watcherEngine.js`**: Monitors output differences over time. If a session is quiet, it transitions the worker's status from `running` to `idle` after the configured threshold.
-3. **`messageProcessor.js`**: Analyzes text layout cues (e.g. Yes/No questions `[y/N]`, numbered menus `1. Option`, and key requests) to formulate auto-responses for Auto Mode.
-4. **`sessionStateManager.js`**: Serializes worker configurations, activity logs, and rate-limit timers. Persists states to `state/session-state.json` via a debounced, 500ms delay write queue.
-5. **`telegramService.js`**: Connects to the Telegram Bot API to deliver alerts when workers stall.
+The backend relies on isolated modules to implement specialized logic, subprocess bindings, security, and alerts:
+1. **`tmuxService.js`**: Contains native `tmux` subprocess execution bindings (`tmuxExec`, `tmuxExecAsync`, `isAlive`) and safety name validation (`sanitizeSessionName`), keeping terminal execution details decoupled from routing.
+2. **`authService.js`**: Manages HTTP session creation, cookie signing, timed session-pruning, security matching (`timingSafePasswordMatch`), and IP-based rate limiting to prevent brute-force attacks.
+3. **`portDetector.js`**: Controls local TCP port checking, content-type mapping, state tracking for active endpoints, and background `cloudflared` preview tunnel spawning.
+4. **`patternEngine.js`**: Core regular expression analyzer. Compiled regexes check shell history to detect active requests or rate-limit warnings. It parses complex reset strings (relative times like `3h 15m` or absolute timestamps like `12:20am (Asia/Bangkok)`) into UTC milliseconds.
+5. **`watcherEngine.js`**: Monitors output differences over time. If a session is quiet, it transitions the worker's status from `running` to `idle` after the configured threshold.
+6. **`messageProcessor.js`**: Analyzes text layout cues (e.g. Yes/No questions `[y/N]`, numbered menus `1. Option`, and key requests) to formulate auto-responses for Auto Mode.
+7. **`sessionStateManager.js`**: Serializes worker configurations, activity logs, and rate-limit timers. Persists states to `state/session-state.json` via a debounced, 500ms delay write queue.
+8. **`telegramService.js`**: Connects to the Telegram Bot API to deliver alerts when workers stall.
 
 ### 2.3 Frontend Client (`public/`)
 The frontend is written in vanilla ES6 JavaScript and HTML5/CSS3. It does not pull in major frameworks (like React or Vue) to keep loads fast and latency low.

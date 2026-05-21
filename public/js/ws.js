@@ -90,6 +90,13 @@ function sendResize() {
   });
 }
 
+// Debounced resize — prevents flooding the WebSocket at 60 fps during a window drag.
+let _resizeTimer;
+function scheduleSendResize() {
+  clearTimeout(_resizeTimer);
+  _resizeTimer = setTimeout(sendResize, 120);
+}
+
 // ── API Calls ──
 
 function apiPost(url, body) {

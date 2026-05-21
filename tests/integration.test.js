@@ -1,0 +1,208 @@
+const { test, before, after } = require("node:test");
+const assert = require("node:assert/strict");
+const { spawn } = require("node:child_process");
+const fs = require("node:fs");
+const path = require("node:path");
+const http = require("node:http");
+
+const TEST_PORT = 8089;
+const PASSWORD = "testpassword123";
+let serverProcess;
+let tokenCookie = "";
+
+// Helper to make HTTP requests to the test server
+function request(method, pathname, body = null, headers = {}) {
+  return new Promise((resolve, reject) => {
+    const data = body ? JSON.stringify(body) : "";
+    const reqHeaders = { ...headers };
+    if (body) {
+      reqHeaders["Content-Type"] = "application/json";
+    }
+    if (tokenCookie) {
+      reqHeaders["Cookie"] = tokenCookie;
+    }
+    const req = http.request(
+      {
+        hostname: "127.0.0.1",
+        port: TEST_PORT,
+        path: pathname,
+        method,
+        headers: reqHeaders,
+      },
+      res => {
+        let resData = "";
+        res.on("data", chunk => (resData += chunk));
+        res.on("end", () => {
+          let json = null;
+          try {
+            json = JSON.parse(resData);
+          } catch (e) {}
+          resolve({ status: res.statusCode, headers: res.headers, body: json, rawBody: resData });
+        });
+      }
+    );
+    req.on("error", reject);
+    if (data) {
+      req.write(data);
+    }
+    req.end();
+  });
+}
+
+before(() => {
+  const mockBinDir = path.join(__dirname, "mock-bin");
+  if (!fs.existsSync(mockBinDir)) {
+    fs.mkdirSync(mockBinDir, { recursive: true });
+  }
+  const mockTmuxPath = path.join(mockBinDir, "tmux");
+  const mockTmuxContent = `#!/usr/bin/env node
+const args = process.argv.slice(2);
+if (args.includes('ls')) {
+  console.log("term-1|/mock/cwd/1|bash");
+  console.log("term-2|/mock/cwd/2|zsh");
+  console.log("untracked-session|/mock/cwd/untracked|python");
+  process.exit(0);
+}
+if (args.includes('has-session')) {
+  process.exit(0);
+}
+if (args.includes('capture-pane') || args.includes('display-message')) {
+  if (args.includes('display-message')) {
+    console.log("/mock/cwd/1|||bash");
+  } else {
+    console.log("Hello. Listening on http://localhost:4000");
+  }
+  process.exit(0);
+}
+process.exit(0);
+`;
+  fs.writeFileSync(mockTmuxPath, mockTmuxContent);
+  fs.chmodSync(mockTmuxPath, 0o755);
+
+  return new Promise((resolve, reject) => {
+    // Start server.js as a subprocess
+    serverProcess = spawn("node", ["server.js"], {
+      cwd: path.join(__dirname, ".."),
+      env: {
+        ...process.env,
+        PORT: TEST_PORT,
+        DASHBOARD_PASSWORD: PASSWORD,
+        PATH: mockBinDir + path.delimiter + process.env.PATH,
+        AI_MONITOR_ENABLED: "0",
+        ENABLE_PREVIEW: "0",
+        ENABLE_TUNNEL: "0",
+        ENABLE_TUNNEL_HEALTHCHECK: "0"
+      }
+    });
+
+    let resolved = false;
+    const checkServer = () => {
+      const req = http.get(`http://127.0.0.1:${TEST_PORT}/`, (res) => {
+        if (res.statusCode === 200) {
+          resolved = true;
+          resolve();
+        } else {
+          setTimeout(checkServer, 100);
+        }
+      });
+      req.on("error", () => {
+        setTimeout(checkServer, 100);
+      });
+    };
+    
+    // Set a timeout to prevent hanging forever if server fails to start
+    setTimeout(() => {
+      if (!resolved) {
+        serverProcess.kill();
+        reject(new Error("Timeout waiting for test server to start"));
+      }
+    }, 5000);
+
+    setTimeout(checkServer, 100);
+  });
+});
+
+after(() => {
+  if (serverProcess) {
+    serverProcess.kill("SIGKILL");
+  }
+  // Remove the mock directory
+  try {
+    fs.rmSync(path.join(__dirname, "mock-bin"), { recursive: true, force: true });
+  } catch (e) {}
+});
+
+test("Integration tests for TmuxHub API", async (t) => {
+  // 1. Perform login
+  const loginRes = await request("POST", "/api/login", { pw: PASSWORD });
+  assert.equal(loginRes.status, 200);
+  assert.equal(loginRes.body.ok, true);
+  
+  const setCookie = loginRes.headers["set-cookie"];
+  assert.ok(setCookie);
+  tokenCookie = setCookie[0].split(";")[0];
+
+  // 2. Scan dedup test
+  await t.test("GET /api/scan should exclude already tracked sessions", async () => {
+    const scanRes = await request("GET", "/api/scan");
+    assert.equal(scanRes.status, 200);
+    assert.ok(Array.isArray(scanRes.body));
+    
+    // term-1 and term-2 are already tracked via recoverSessions at startup,
+    // so they should NOT be in the scan results.
+    const names = scanRes.body.map(s => s.sessionName);
+    assert.ok(!names.includes("term-1"));
+    assert.ok(!names.includes("term-2"));
+    assert.ok(names.includes("untracked-session"));
+  });
+
+  // 3. Double-attach guard test
+  await t.test("POST /api/attach twice should return the same worker ID", async () => {
+    const attachRes1 = await request("POST", "/api/attach", {
+      sessionName: "untracked-session",
+      cwd: "/mock/cwd/untracked"
+    });
+    assert.equal(attachRes1.status, 200);
+    const workerId = attachRes1.body.id;
+    assert.ok(workerId);
+
+    // Call attach again with the same sessionName
+    const attachRes2 = await request("POST", "/api/attach", {
+      sessionName: "untracked-session",
+      cwd: "/mock/cwd/untracked"
+    });
+    assert.equal(attachRes2.status, 200);
+    assert.equal(attachRes2.body.id, workerId);
+    
+    // Check that we don't have multiple workers for it
+    const workersRes = await request("GET", "/api/workers");
+    assert.equal(workersRes.status, 200);
+    const matchingWorkers = workersRes.body.filter(w => w.sessionName === "untracked-session");
+    assert.equal(matchingWorkers.length, 1);
+  });
+
+  // 4. Remove cleanup test
+  await t.test("POST /api/remove should clean up worker and metadata", async () => {
+    // Before remove, term-1 is tracked
+    const workersBefore = await request("GET", "/api/workers");
+    const term1Worker = workersBefore.body.find(w => w.sessionName === "term-1");
+    assert.ok(term1Worker);
+    const term1Id = term1Worker.id;
+
+    // Remove term-1
+    const removeRes = await request("POST", "/api/remove", { id: term1Id });
+    assert.equal(removeRes.status, 200);
+    assert.equal(removeRes.body.ok, true);
+
+    // After remove, term-1 should not be in the workers list
+    const workersAfter = await request("GET", "/api/workers");
+    const term1WorkerAfter = workersAfter.body.find(w => w.sessionName === "term-1");
+    assert.equal(term1WorkerAfter, undefined);
+
+    // Since term-1 is no longer in workers list but is still returned by tmux ls,
+    // it should now show up in scan results!
+    const scanRes = await request("GET", "/api/scan");
+    const names = scanRes.body.map(s => s.sessionName);
+    assert.ok(names.includes("term-1"));
+  });
+});

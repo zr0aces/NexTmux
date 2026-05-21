@@ -1,5 +1,18 @@
 // ── Worker Card UI ──
 
+// Per-tab command input history: id → { entries: string[], cursor: number }
+const inputHistory = new Map();
+
+function pushHistory(id, text) {
+  if (!text) return;
+  if (!inputHistory.has(id)) inputHistory.set(id, { entries: [], cursor: -1 });
+  const h = inputHistory.get(id);
+  // Avoid consecutive duplicates
+  if (h.entries[h.entries.length - 1] !== text) h.entries.push(text);
+  if (h.entries.length > 200) h.entries.shift();
+  h.cursor = -1;
+}
+
 let customTitles = {};
 try {
   customTitles = JSON.parse(localStorage.getItem('tabTitles') || '{}');
@@ -11,8 +24,13 @@ function saveCustomTitles() {
   localStorage.setItem('tabTitles', JSON.stringify(customTitles));
 }
 
+function getSessionName(id) {
+  const tab = document.querySelector('.tab[data-id="' + id + '"]');
+  return (tab && tab.dataset.sessionName) || id;
+}
+
 function getTitleBase(id, cmd) {
-  return customTitles[id] || cmd || 'claude';
+  return customTitles[getSessionName(id)] || cmd || 'claude';
 }
 
 function trimTitle(text) {
@@ -34,10 +52,11 @@ function renderTitle(id, cwd, cmd) {
   const tab = document.querySelector('.tab[data-id="' + id + '"]');
   const tabCwd = cwd || (tab && tab.dataset.cwd) || '';
   const tabCmd = cmd || (tab && tab.dataset.cmd) || 'claude';
+  const sName = (tab && tab.dataset.sessionName) || id;
   const folder = tabCwd.replace(/\/$/, '').split('/').pop() || tabCwd;
   let text = '';
-  if (customTitles[id]) {
-    text = '#' + id + ' ' + customTitles[id];
+  if (customTitles[sName]) {
+    text = '#' + id + ' ' + customTitles[sName];
   } else {
     text = '#' + id + ' ' + tabCmd + ' · ' + folder;
   }
@@ -129,19 +148,21 @@ function ensureCard(id, cwd, status, logs, cmd, reason, monitorMeta) {
   tab.dataset.id = id;
   tab.dataset.cwd = cwd;
   tab.dataset.cmd = cmdLabel;
+  if (monitorMeta && monitorMeta.sessionName) tab.dataset.sessionName = monitorMeta.sessionName;
   var folder = cwd.replace(/\/$/, '').split('/').pop() || cwd;
   tab.innerHTML = '<span class="tab-dot' + (status === 'stopped' ? ' stopped' : '') + (status === 'completed' ? ' completed' : '') + '" id="tab-dot-' + id + '"></span><span class="tab-label" id="tab-label-' + id + '">#' + id + ' ' + escapeHtml(cmd || 'claude') + ' · ' + escapeHtml(folder) + '</span>';
   tab.addEventListener('click', () => selectTab(id));
   tab.addEventListener('dblclick', e => {
     e.stopPropagation();
-    const current = customTitles[id] || cmdLabel;
+    const sName = tab.dataset.sessionName || id;
+    const current = customTitles[sName] || cmdLabel;
     const next = prompt('Tab title', current);
     if (next === null) return;
     const trimmed = next.trim();
     if (!trimmed) {
-      delete customTitles[id];
+      delete customTitles[sName];
     } else {
-      customTitles[id] = trimTitle(trimmed);
+      customTitles[sName] = trimTitle(trimmed);
     }
     saveCustomTitles();
     renderTitle(id);
@@ -209,6 +230,36 @@ function bindCard(id, root) {
         }
         e.preventDefault();
         if (inp.value.trim()) { sendInput(id); } else { sendSpecialKey(id, 'Enter'); }
+        return;
+      }
+      // History cycling: Up/Down when the caret is on the first/last line
+      const h = inputHistory.get(id);
+      if (!h || !h.entries.length) return;
+      if (e.key === 'ArrowUp') {
+        const lines = inp.value.split('\n');
+        const caretAtStart = inp.selectionStart === 0 || lines.length === 1;
+        if (!caretAtStart) return;
+        e.preventDefault();
+        const next = h.cursor === -1 ? h.entries.length - 1 : Math.max(0, h.cursor - 1);
+        h.cursor = next;
+        inp.value = h.entries[next];
+        inp.style.height = 'auto';
+        inp.style.height = Math.min(inp.scrollHeight, 120) + 'px';
+        inp.selectionStart = inp.selectionEnd = inp.value.length;
+      } else if (e.key === 'ArrowDown') {
+        if (h.cursor === -1) return;
+        e.preventDefault();
+        const next = h.cursor + 1;
+        if (next >= h.entries.length) {
+          h.cursor = -1;
+          inp.value = '';
+        } else {
+          h.cursor = next;
+          inp.value = h.entries[next];
+        }
+        inp.style.height = 'auto';
+        inp.style.height = Math.min(inp.scrollHeight, 120) + 'px';
+        inp.selectionStart = inp.selectionEnd = inp.value.length;
       }
     });
     inp.addEventListener('input', () => {
@@ -494,6 +545,7 @@ function sendInput(id) {
   if (!text) return;
   inp.value = '';
   inp.style.height = 'auto';
+  pushHistory(id, text);
   notifyActive();
   apiPost('/api/input', { id, text });
 }
@@ -541,15 +593,108 @@ function scanSessions() {
     .then(found => {
       btn.textContent = '🔍';
       if (!found.length) { alert('No new tmux sessions found.'); return; }
-      const names = found.map(f => '• ' + f.sessionName + ' (' + displayPath(f.cwd) + ')').join('\n');
-      if (!confirm('Add these sessions to dashboard?\n\n' + names)) return;
-      // Sequential attach: wait for each response before sending the next to
-      // prevent race-condition duplicates when attaches land before spawned
-      // WebSocket events reach the client.
-      found.reduce(
-        (chain, f) => chain.then(() => apiPost('/api/attach', { sessionName: f.sessionName, cwd: f.cwd })),
-        Promise.resolve()
-      );
+      showScanModal(found);
     })
     .catch(() => { btn.textContent = '🔍'; });
+}
+
+function showScanModal(sessions) {
+  // Remove any existing modal
+  const existing = document.getElementById('scan-modal-overlay');
+  if (existing) existing.remove();
+
+  const overlay = document.createElement('div');
+  overlay.id = 'scan-modal-overlay';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.6);display:flex;align-items:center;justify-content:center;z-index:9999';
+
+  const modal = document.createElement('div');
+  modal.style.cssText = 'background:#161b22;border:1px solid #30363d;border-radius:10px;padding:20px 24px;min-width:340px;max-width:520px;width:90%;max-height:70vh;display:flex;flex-direction:column;gap:12px;box-shadow:0 8px 32px rgba(0,0,0,0.5)';
+
+  const title = document.createElement('div');
+  title.style.cssText = 'font-size:14px;font-weight:600;color:#e6edf3';
+  title.textContent = '🔍 Discovered tmux Sessions';
+  modal.appendChild(title);
+
+  const subtitle = document.createElement('div');
+  subtitle.style.cssText = 'font-size:11px;color:#8b949e';
+  subtitle.textContent = 'Select sessions to attach to the dashboard:';
+  modal.appendChild(subtitle);
+
+  const list = document.createElement('div');
+  list.style.cssText = 'overflow-y:auto;max-height:260px;display:flex;flex-direction:column;gap:6px';
+
+  const checkboxes = sessions.map(f => {
+    const row = document.createElement('label');
+    row.style.cssText = 'display:flex;align-items:center;gap:10px;padding:7px 10px;border-radius:6px;cursor:pointer;background:#0d1117;border:1px solid #21262d;transition:border-color .15s';
+    row.addEventListener('mouseenter', () => row.style.borderColor = '#58a6ff');
+    row.addEventListener('mouseleave', () => row.style.borderColor = '#21262d');
+
+    const cb = document.createElement('input');
+    cb.type = 'checkbox';
+    cb.checked = true;
+    cb.style.cssText = 'accent-color:#58a6ff;width:14px;height:14px;cursor:pointer';
+
+    const info = document.createElement('div');
+    info.style.cssText = 'display:flex;flex-direction:column;gap:2px;overflow:hidden';
+
+    const sname = document.createElement('span');
+    sname.style.cssText = 'font-size:12px;font-weight:600;color:#e6edf3;font-family:monospace';
+    sname.textContent = f.sessionName;
+
+    const scwd = document.createElement('span');
+    scwd.style.cssText = 'font-size:11px;color:#8b949e;overflow:hidden;text-overflow:ellipsis;white-space:nowrap';
+    scwd.textContent = displayPath(f.cwd);
+    scwd.title = f.cwd;
+
+    info.appendChild(sname);
+    info.appendChild(scwd);
+    row.appendChild(cb);
+    row.appendChild(info);
+    list.appendChild(row);
+    return { cb, f };
+  });
+  modal.appendChild(list);
+
+  // Select all / none toggles
+  const toggleRow = document.createElement('div');
+  toggleRow.style.cssText = 'display:flex;gap:8px';
+  ['Select all', 'Select none'].forEach((label, i) => {
+    const a = document.createElement('button');
+    a.textContent = label;
+    a.style.cssText = 'background:none;border:1px solid #30363d;border-radius:5px;color:#8b949e;font-size:11px;padding:2px 8px;cursor:pointer';
+    a.addEventListener('click', () => checkboxes.forEach(({ cb }) => { cb.checked = !i; }));
+    toggleRow.appendChild(a);
+  });
+  modal.appendChild(toggleRow);
+
+  const btnRow = document.createElement('div');
+  btnRow.style.cssText = 'display:flex;gap:8px;justify-content:flex-end';
+
+  const cancelBtn = document.createElement('button');
+  cancelBtn.textContent = 'Cancel';
+  cancelBtn.style.cssText = 'background:#21262d;border:1px solid #30363d;border-radius:6px;color:#8b949e;font-size:12px;padding:5px 14px;cursor:pointer';
+  cancelBtn.addEventListener('click', () => overlay.remove());
+
+  const attachBtn = document.createElement('button');
+  attachBtn.textContent = 'Attach Selected';
+  attachBtn.style.cssText = 'background:#1f6feb;border:none;border-radius:6px;color:#fff;font-size:12px;padding:5px 14px;cursor:pointer;font-weight:600';
+  attachBtn.addEventListener('click', () => {
+    const selected = checkboxes.filter(({ cb }) => cb.checked).map(({ f }) => f);
+    overlay.remove();
+    if (!selected.length) return;
+    // Sequential attach to prevent race-condition duplicates
+    selected.reduce(
+      (chain, f) => chain.then(() => apiPost('/api/attach', { sessionName: f.sessionName, cwd: f.cwd })),
+      Promise.resolve()
+    );
+  });
+
+  btnRow.appendChild(cancelBtn);
+  btnRow.appendChild(attachBtn);
+  modal.appendChild(btnRow);
+
+  overlay.appendChild(modal);
+  overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
+  document.body.appendChild(overlay);
+  attachBtn.focus();
 }

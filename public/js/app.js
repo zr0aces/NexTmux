@@ -238,7 +238,7 @@ document.addEventListener('click', e => {
   }
 });
 
-window.addEventListener('resize', sendResize);
+window.addEventListener('resize', scheduleSendResize);
 initRememberedPassword();
 
 // ── Keyboard Shortcuts ──

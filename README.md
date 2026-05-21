@@ -141,14 +141,18 @@ tmuxhub/
 │   ├── installation.md    # Environments, systemd/launchd, tunnels
 │   ├── usage.md           # Dashboard user guide & tmux commands
 │   └── ai_monitoring.md   # Supervision engine & Telegram setup
-├── server.js              # Node.js server (tmux management, WebSocket)
+├── server.js              # Node.js server (routers & orchestrator)
 ├── index.html             # Web UI entry point
 ├── setup.sh               # One-step macOS setup script
 ├── lib/
 │   ├── patternEngine.js   # Regex wait-state detection
 │   ├── watcherEngine.js   # Poll loop + state transitions
 │   ├── telegramService.js # Outbound Telegram notifications
-│   └── sessionStateManager.js # Metadata persistence & debouncing
+│   ├── sessionStateManager.js # Metadata persistence & debouncing
+│   ├── messageProcessor.js # Auto-response menu/prompt parser
+│   ├── tmuxService.js     # Native tmux exec/subprocess integration
+│   ├── authService.js     # Session management & login rate limiting
+│   └── portDetector.js    # Localhost port detection & secure preview tunnels
 ├── public/
 │   ├── style.css          # Styles
 │   └── js/
@@ -157,6 +161,12 @@ tmuxhub/
 │       ├── ws.js          # WebSocket communication
 │       ├── workers.js     # Worker card UI rendering
 │       └── app.js         # Init & event binding
+├── tests/                 # Unit & Integration test suite
+│   ├── watcherEngine.test.js
+│   ├── patternEngine.test.js
+│   ├── sessionStateManager.test.js
+│   ├── messageProcessor.test.js
+│   └── integration.test.js # End-to-end API tests
 ├── config.example.json    # User config template
 └── .env.example           # Environment variables template
 ```
