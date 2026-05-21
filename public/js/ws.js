@@ -67,20 +67,26 @@ function sendResize() {
   if (!ws || ws.readyState !== 1) return;
   const MIN_COLS = 8;
   const MIN_ROWS = 4;
-  const box = Array.from(document.querySelectorAll('.logs'))
+  const measureBox = Array.from(document.querySelectorAll('.logs'))
     .find(el => el.clientWidth > 0 && el.clientHeight > 0 && el.getClientRects().length > 0);
-  if (!box || !box.clientWidth) return;
-  const ch = measureChar(box);
+  if (!measureBox) return;
+  const ch = measureChar(measureBox);
   if (!ch.w || !ch.h) return;
-  const style = getComputedStyle(box);
+  const style = getComputedStyle(measureBox);
   const padX = (parseFloat(style.paddingLeft) || 0) + (parseFloat(style.paddingRight) || 0);
   const padY = (parseFloat(style.paddingTop) || 0) + (parseFloat(style.paddingBottom) || 0);
-  const innerW = Math.max(0, box.clientWidth - padX);
-  const innerH = Math.max(0, box.clientHeight - padY);
-  const cols = Math.max(MIN_COLS, Math.floor(innerW / ch.w));
-  const rows = Math.max(MIN_ROWS, Math.floor(innerH / ch.h));
+
   document.querySelectorAll('.tab').forEach(t => {
-    ws.send(JSON.stringify({ type: 'resize', id: t.dataset.id, cols, rows }));
+    const id = t.dataset.id;
+    if (t.dataset.preview === 'true') return;
+    const box = document.getElementById('logs-' + id);
+    if (box && box.clientWidth > 0 && box.clientHeight > 0) {
+      const innerW = Math.max(0, box.clientWidth - padX);
+      const innerH = Math.max(0, box.clientHeight - padY);
+      const cols = Math.max(MIN_COLS, Math.floor(innerW / ch.w));
+      const rows = Math.max(MIN_ROWS, Math.floor(innerH / ch.h));
+      ws.send(JSON.stringify({ type: 'resize', id, cols, rows }));
+    }
   });
 }
 
@@ -112,8 +118,12 @@ function loadConfig() {
   apiGet('/api/config')
     .then(cfg => {
       if (cfg.basePath) window._basePath = cfg.basePath;
-      if (cfg.favorites && !localStorage.getItem('fav')) {
-        favorites = cfg.favorites;
+      if (cfg.favorites) {
+        cfg.favorites.forEach(f => {
+          if (!favorites.includes(f)) {
+            favorites.push(f);
+          }
+        });
         saveFavs();
       }
       renderDropdown();
