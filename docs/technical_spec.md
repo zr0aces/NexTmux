@@ -12,7 +12,6 @@ TmuxHub is a lightweight, real-time developer terminal dashboard and workspace m
 * **Native Tmux Execution**: Seamless bidirectional mirroring between the web console and host terminals.
 * **AI wait-state Supervision**: A state machine that tracks shell output patterns and transitions workers between `running`, `idle`, and `waiting` states.
 * **Rate-Limit Auto-Recovery**: Automated extraction of rate-limit reset times with scheduled resume triggers (sending input keys to tmux panes when time limits expire).
-* **Localhost Port Previews**: Automated detection of local dev servers running inside worker sessions, offering integrated resizable iframe viewports.
 * **Secure Session Mirroring**: HTTP Cookie token-based authentication and secure password encryption within client-side browser database storage.
 
 ---
@@ -27,7 +26,6 @@ graph TD
         AppJS[app.js: Init & Auth]
         WSJS[ws.js: WebSocket & Resizer]
         WorkersJS[workers.js: Cards & Inputs]
-        PreviewJS[preview.js: Iframe Previews]
         DiffJS[git-diff.js: Diff2Html Visualizer]
     end
 
@@ -65,19 +63,17 @@ The backend server (`server.js`) acts as the central router and coordinator. It 
 The backend relies on isolated modules to implement specialized logic, subprocess bindings, security, and alerts:
 1. **`tmuxService.js`**: Contains native `tmux` subprocess execution bindings (`tmuxExec`, `tmuxExecAsync`, `isAlive`) and safety name validation (`sanitizeSessionName`), keeping terminal execution details decoupled from routing.
 2. **`authService.js`**: Manages HTTP session creation, cookie signing, timed session-pruning, security matching (`timingSafePasswordMatch`), and IP-based rate limiting to prevent brute-force attacks.
-3. **`portDetector.js`**: Controls local TCP port checking, content-type mapping, state tracking for active endpoints, and background `cloudflared` preview tunnel spawning.
-4. **`patternEngine.js`**: Core regular expression analyzer. Compiled regexes check shell history to detect active requests or rate-limit warnings. It parses complex reset strings (relative times like `3h 15m` or absolute timestamps like `12:20am (Asia/Bangkok)`) into UTC milliseconds.
-5. **`watcherEngine.js`**: Monitors output differences over time. If a session is quiet, it transitions the worker's status from `running` to `idle` after the configured threshold.
-6. **`messageProcessor.js`**: Analyzes text layout cues (e.g. Yes/No questions `[y/N]`, numbered menus `1. Option`, and key requests) to formulate auto-responses for Auto Mode.
-7. **`sessionStateManager.js`**: Serializes worker configurations, activity logs, and rate-limit timers. Persists states to `state/session-state.json` via a debounced, 500ms delay write queue.
-8. **`telegramService.js`**: Connects to the Telegram Bot API to deliver alerts when workers stall.
+3. **`patternEngine.js`**: Core regular expression analyzer. Compiled regexes check shell history to detect active requests or rate-limit warnings. It parses complex reset strings (relative times like `3h 15m` or absolute timestamps like `12:20am (Asia/Bangkok)`) into UTC milliseconds.
+4. **`watcherEngine.js`**: Monitors output differences over time. If a session is quiet, it transitions the worker's status from `running` to `idle` after the configured threshold.
+5. **`messageProcessor.js`**: Analyzes text layout cues (e.g. Yes/No questions `[y/N]`, numbered menus `1. Option`, and key requests) to formulate auto-responses for Auto Mode.
+6. **`sessionStateManager.js`**: Serializes worker configurations, activity logs, and rate-limit timers. Persists states to `state/session-state.json` via a debounced, 500ms delay write queue.
+7. **`telegramService.js`**: Connects to the Telegram Bot API to deliver alerts when workers stall.
 
 ### 2.3 Frontend Client (`public/`)
 The frontend is written in vanilla ES6 JavaScript and HTML5/CSS3. It does not pull in major frameworks (like React or Vue) to keep loads fast and latency low.
 * **`app.js`**: Controls the login view and routes user interactions. Hooks into global keydowns to feed typing inputs directly to active sessions.
 * **`ws.js`**: Configures the WebSocket connection and measures terminal dimensions using a dummy DOM character span to adjust the server-side tmux pane layout dynamically.
 * **`workers.js`**: Generates high-density cards for active sessions, updating logs, virtual keys, scroll logs, and supervisors.
-* **`preview.js`**: Manages browser iframes, resize handles, and prompt toasts for localhost ports.
 * **`git-diff.js`**: Communicates with `/api/git-diff` and renders visual diffs using the CDN-delivered `diff2html` library.
 * **`ansi.js`**: Converts raw ANSI escape sequences into styled, theme-compliant HTML elements.
 
@@ -99,7 +95,7 @@ All REST API endpoints require session cookie validation, except `/api/login`.
 | `/api/input` | POST | `{ id, text }` | `{ ok: boolean }` | Sends characters and a newline key down to a worker pane. |
 | `/api/key` | POST | `{ id, key }` | `{ ok: boolean }` | Fires specialized tmux keystrokes (e.g. `C-c`, `Escape`, `Tab`). |
 | `/api/reconnect` | POST | `{ id }` | `{ ok: boolean }` | Restarts monitoring loops on disconnected or dead tmux sessions. |
-| `/api/remove` | POST | `{ id }` | `{ ok: boolean }` | Destroys dashboard tracking and associated preview tunnels. |
+| `/api/remove` | POST | `{ id }` | `{ ok: boolean }` | Destroys dashboard tracking. |
 | `/api/kill` | POST | `{ id }` | `{ ok: boolean }` | Issues a `kill-session` command to terminate the target tmux instance. |
 | `/api/set-monitor-mode`| POST| `{ id, mode }` | `{ ok: boolean, mode: string }`| Configures supervision mode (`off`, `monitor`, or `auto`). |
 | `/api/git-diff` | GET | `?id={id}&file={path}` | Diff data or file list | Returns git status change lists or concrete code changes. |
@@ -133,18 +129,7 @@ Real-time messages are transmitted as JSON packets over a single WebSocket conne
   ```json
   { "type": "monitorMeta", "id": "1", "waitingState": "waiting", "lastActivityAt": "...", "lastMatchedPattern": "token_limit" }
   ```
-* **`preview_detected`**: Fired when an active dev server port is discovered.
-  ```json
-  { "type": "preview_detected", "workerId": "1", "port": 3000 }
-  ```
-* **`preview_prompt`**: Fired when a non-HTML endpoint port is discovered.
-  ```json
-  { "type": "preview_prompt", "workerId": "1", "port": 8080, "contentType": "application/json" }
-  ```
-* **`preview_tunnel`**: Broadcast when a public Cloudflare secure tunnel url is allocated for a port.
-  ```json
-  { "type": "preview_tunnel", "port": 3000, "url": "https://random-sub.trycloudflare.com" }
-  ```
+
 * **`snapshot`**: Sends full-pane output updates (up to 500 lines) during polling intervals.
   ```json
   { "type": "snapshot", "id": "1", "lines": ["line 1", "line 2", "..."] }
@@ -219,20 +204,7 @@ const RESET_TIME_RE = /(?:try(?:\s+again)?(?:\s+in)?|resets?(?:\s+(?:in|at))?|av
 2. **Absolute Parsing**: Times like `11:00 AM PST` or `12:20am (Asia/Bangkok)` are resolved using built-in timezone offset lists. Standard IANA timezones are resolved using `Intl.DateTimeFormat` timezone offsets.
 3. **Execution Recovery**: A UTC epoch timestamp `resetAtEpochMs` is calculated and saved. When `Date.now() >= resetAtEpochMs`, the server resets the wait-state and inputs `"continue"` into the tmux pane to resume.
 
-### 4.4 Localhost Port Previews
-TmuxHub inspects output captures for local web URLs via `/(?:https?:\/\/)?(?:localhost|127\.0\.0\.1):(\d{2,5})/g`.
-* **Filtering**: Standard database and caching ports (like `3306` or `6379`) are excluded.
-* **Verification**: If a port match is found, the server checks if a local socket is listening.
-* **Content Checking**: It runs a request to check the `Content-Type`.
-  * If it contains `text/html`, the frontend splits the layout view to load the local URL in an iframe.
-  * If it is a JSON or API endpoint, a toast notifies the user of the active port.
-* **Cloudflare Tunnels**: If `PREVIEW_TUNNEL=1` is set, the server runs a sub-tunnel process:
-  ```bash
-  cloudflared tunnel --url http://localhost:{detectedPort}
-  ```
-  The resulting secure URL is broadcast to remote users so they can access the preview iframe over WAN without configuring local firewalls.
-
-### 4.5 Git Diff Side-Panel
+### 4.4 Git Diff Side-Panel
 The side-panel displays changes within the active workspace directory:
 1. **File Status Listing**: Queries the directory state:
    ```bash

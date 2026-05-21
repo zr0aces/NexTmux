@@ -22,14 +22,7 @@ const {
   recordFailedLogin,
   clearFailedLogin,
 } = require("./lib/authService");
-const {
-  detectPorts,
-  cleanupPreviewPorts,
-  startPreviewTunnel,
-  detectedPorts,
-  previewTunnels,
-  checkPortListening,
-} = require("./lib/portDetector");
+
 
 const PORT = process.env.PORT || 8081;
 const PASSWORD = process.env.DASHBOARD_PASSWORD || "changeme";
@@ -37,8 +30,7 @@ const DISCORD_WEBHOOK = process.env.DISCORD_WEBHOOK;
 const ENABLE_TUNNEL_HEALTHCHECK = process.env.ENABLE_TUNNEL_HEALTHCHECK === "1";
 const DISCORD_ALERT_WEBHOOK = process.env.DISCORD_ALERT_WEBHOOK;
 const ALERT_WEBHOOK = DISCORD_ALERT_WEBHOOK || DISCORD_WEBHOOK;
-const ENABLE_PREVIEW = process.env.ENABLE_PREVIEW === "1";
-const PREVIEW_TUNNEL = process.env.PREVIEW_TUNNEL === "1";
+
 const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const TELEGRAM_CHAT_ID = process.env.TELEGRAM_CHAT_ID;
 // ENABLE_TUNNEL: env takes precedence; config fallback resolved after loadConfig()
@@ -414,12 +406,8 @@ async function pollOutput(id) {
       })
     : { changed: false, nextState: null, detection: null };
 
-  // Output unchanged — pending port detection retry
-  if (!inspect.changed) {
-    if (ENABLE_PREVIEW) detectPorts(id, output, PORT, PREVIEW_TUNNEL, broadcast);
-  } else {
+  if (inspect.changed) {
     lastCapture.set(id, output);
-    if (ENABLE_PREVIEW) detectPorts(id, output, PORT, PREVIEW_TUNNEL, broadcast);
     w.lastChangeTime = now;
     sessionStateManager.updateActivity(w, now);
     const lines = output.split("\n");
@@ -726,7 +714,6 @@ const server = http.createServer(async (req, res) => {
     const w = workers.get(id);
     if (w) {
       if (w.pollTimer) clearInterval(w.pollTimer);
-      cleanupPreviewPorts(id);
       sessionStateManager.removeSession(w.sessionName);
       workers.delete(id);
       lastCapture.delete(id);
@@ -960,29 +947,7 @@ wss.on('connection', (ws, req) => {
   });
   ws.on('close', () => clientSizes.delete(ws));
 
-  // Sync existing preview state to newly connected clients (listening ports only, deduplicated by port)
-  if (ws.readyState === 1) {
-    const syncedPorts = new Set();
-    detectedPorts.forEach((portSet, workerId) => {
-      portSet.forEach(port => {
-        if (syncedPorts.has(port)) return;
-        syncedPorts.add(port);
-        checkPortListening(port).then(listening => {
-          if (listening) {
-            ws.send(JSON.stringify({ type: "preview_detected", workerId, port }));
-          } else {
-            portSet.delete(port);
-          }
-        });
-      });
-    });
-    // Send any already-created tunnel URLs
-    previewTunnels.forEach((tunnel, port) => {
-      if (tunnel.url) {
-        ws.send(JSON.stringify({ type: "preview_tunnel", port, url: tunnel.url }));
-      }
-    });
-  }
+
 });
 
 
@@ -1152,11 +1117,9 @@ server.listen(PORT, () => {
 
 process.on("SIGINT", () => {
   if (tunnelProcess) tunnelProcess.kill();
-  previewTunnels.forEach(t => t.process.kill());
   process.exit();
 });
 process.on("SIGTERM", () => {
   if (tunnelProcess) tunnelProcess.kill();
-  previewTunnels.forEach(t => t.process.kill());
   process.exit();
 });

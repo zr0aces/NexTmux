@@ -33,7 +33,6 @@ Config files: `.env` (PORT, DASHBOARD_PASSWORD, TELEGRAM_BOT_TOKEN, etc.), `conf
 - `favorites.js` — Favorites & path management
 - `ansi.js` — ANSI escape code renderer for terminal output
 - `git-diff.js` — Git diff side-panel (uses diff2html from CDN)
-- `preview.js` — Localhost port detection + iframe split/tab preview
 
 **lib/ modules (server-side):**
 - `patternEngine.js` — Compiles regex patterns and scans terminal output for AI wait-states (returns `matched`, `patternName`, `excerpt`)
@@ -69,4 +68,3 @@ Config files: `.env` (PORT, DASHBOARD_PASSWORD, TELEGRAM_BOT_TOKEN, etc.), `conf
 - GitHub dark theme colors (`#0d1117`, `#161b22`, `#e6edf3`)
 - Config precedence: env var → `config.json` → hardcoded default (see `buildMonitorConfig`)
 - `state/session-state.json` is auto-created at runtime; gitignored
-- `ENABLE_PREVIEW=1` env flag enables the localhost port preview tab feature (off by default)

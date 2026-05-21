@@ -23,9 +23,6 @@ function handleMsg(d) {
   if (d.type === 'cwd') updateCwd(d.id, d.cwd);
   if (d.type === 'aiState') updateAIState(d.id, d.state);
   if (d.type === 'monitorMeta') updateMonitorMeta(d.id, d);
-  if (d.type === 'preview_detected') ensurePreview(d.workerId, d.port);
-  if (d.type === 'preview_prompt') showPreviewPrompt(d.workerId, d.port, d.contentType);
-  if (d.type === 'preview_tunnel') updatePreviewTunnel(d.port, d.url);
   if (d.type === 'snapshot') {
     const box = document.getElementById('logs-' + d.id);
     if (box) {
@@ -78,7 +75,6 @@ function sendResize() {
 
   document.querySelectorAll('.tab').forEach(t => {
     const id = t.dataset.id;
-    if (t.dataset.preview === 'true') return;
     const box = document.getElementById('logs-' + id);
     if (box && box.clientWidth > 0 && box.clientHeight > 0) {
       const innerW = Math.max(0, box.clientWidth - padX);

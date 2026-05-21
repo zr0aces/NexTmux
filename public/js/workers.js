@@ -505,7 +505,6 @@ function updateMonitorMeta(id, meta) {
 
 function removeWorker(id) {
   apiPost('/api/remove', { id });
-  removePreviewTabs(id);
   if (typeof closeGitDiff === 'function') closeGitDiff(id);
 
   const logsBox = document.getElementById('logs-' + id);

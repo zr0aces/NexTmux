@@ -1050,130 +1050,21 @@ header h1 {
   transform: translateY(2px);
 }
 
-/* ── Preview Tab ───────────────────────────────────── */
-
-/* ── Preview Tab — visually distinct from terminal tabs */
-.tab[data-preview="true"] .tab-label::before {
-  content: "⬡ ";
-  font-size: 10px;
-  opacity: 0.7;
-}
-
-/* Preview status dot — blue to distinguish from terminal tabs */
-.tab-dot.preview-dot {
-  background: #58a6ff;
-}
-.preview-close {
-  margin-left: 6px;
-  font-size: 11px;
-  color: #666;
-  cursor: pointer;
-  padding: 0 3px;
-  border-radius: 3px;
-}
-.preview-close:hover {
-  color: #fff;
-  background: #c33;
-}
-
-/* Panel layout — iframe fills the entire area */
-.preview-panel {
-  display: none;
-  flex-direction: column;
-  height: 100%;
-  padding: 0;
-  overflow: hidden;
-}
-
-.preview-panel.active {
-  display: flex;
-}
-
-/* Toolbar above the iframe */
-.preview-toolbar {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 4px 8px;
-  background: #161b22;
-  border-bottom: 1px solid #30363d;
-  flex-shrink: 0;
-}
-
-.preview-url {
-  flex: 1;
-  font-size: 12px;
-  color: #8b949e;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-family: "SF Mono", monospace;
-}
-
-.preview-btn {
-  background: #21262d;
-  border: 1px solid #30363d;
-  border-radius: 5px;
-  color: #8b949e;
-  font-size: 11px;
-  padding: 3px 8px;
-  cursor: pointer;
-  white-space: nowrap;
-  text-decoration: none;
-  display: inline-flex;
-  align-items: center;
-}
-
-.preview-btn:hover {
-  background: #30363d;
-  color: #e6edf3;
-}
-
-/* The iframe itself */
-.preview-iframe {
-  flex: 1;
-  width: 100%;
-  border: none;
-  background: #0d1117;
-  min-height: 0;
-}
-
-/* Fallback shown when the iframe fails to load */
-.preview-error {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  flex: 1;
-  gap: 12px;
-  color: #8b949e;
-  font-size: 14px;
-}
-
-.preview-error a {
-  color: #58a6ff;
-  text-decoration: none;
-}
-
-.preview-error a:hover {
-  text-decoration: underline;
-}
-
-/* ── Split Preview (side-by-side terminal + preview) ── */
+/* ── Split Panel Layout (side-by-side terminal + panel) ── */
 
 /* Split mode active: arrange tab-panel contents left-to-right */
-.tab-panel.has-preview {
+.tab-panel.has-split {
   flex-direction: row;
 }
 
 /* Terminal area: left side */
-.tab-panel.has-preview > .card {
+.tab-panel.has-split > .card {
   flex: none;
   width: 50%;
   min-width: 100px;
 }
 
-/* Resize handle: draggable bar between terminal and preview */
+/* Resize handle: draggable bar between terminal and panel */
 .split-resize-handle {
   width: 5px;
   cursor: col-resize;
@@ -1185,110 +1076,6 @@ header h1 {
 .split-resize-handle:hover,
 .split-resize-handle.dragging {
   background: #58a6ff;
-}
-
-/* Preview area: right side */
-.split-preview {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  border-left: none;
-  min-width: 100px;
-}
-
-/* split-preview toolbar inherits from .preview-toolbar */
-.split-preview .preview-toolbar {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 4px 8px;
-  background: #161b22;
-  border-bottom: 1px solid #30363d;
-  flex-shrink: 0;
-}
-
-/* split-preview iframe */
-.split-preview .preview-iframe {
-  flex: 1;
-  width: 100%;
-  border: none;
-  background: #0d1117;
-  min-height: 0;
-}
-
-/* Close button — matches preview-close style */
-.split-preview-close {
-  margin-left: 4px;
-  font-size: 11px;
-  color: #666;
-  cursor: pointer;
-  padding: 2px 5px;
-  border-radius: 3px;
-  background: none;
-  border: none;
-  flex-shrink: 0;
-}
-
-.split-preview-close:hover {
-  color: #fff;
-  background: #c33;
-}
-
-/* ── Preview Prompt Toast ─────────────────────────────── */
-
-.preview-prompt {
-  position: fixed;
-  bottom: 20px;
-  right: 20px;
-  background: #161b22;
-  border: 1px solid #30363d;
-  border-radius: 8px;
-  padding: 12px 16px;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  z-index: 9999;
-  box-shadow: 0 4px 16px rgba(0,0,0,0.4);
-  animation: slideUp 0.3s ease-out;
-}
-
-@keyframes slideUp {
-  from { transform: translateY(20px); opacity: 0; }
-  to { transform: translateY(0); opacity: 1; }
-}
-
-.preview-prompt-text {
-  font-size: 13px;
-  color: #e6edf3;
-}
-
-.preview-prompt-btn {
-  border: none;
-  border-radius: 5px;
-  font-size: 12px;
-  padding: 5px 12px;
-  cursor: pointer;
-  font-weight: 500;
-}
-
-.preview-prompt-open {
-  background: #238636;
-  color: #fff;
-}
-
-.preview-prompt-open:hover {
-  background: #2ea043;
-}
-
-.preview-prompt-dismiss {
-  background: #21262d;
-  color: #8b949e;
-  border: 1px solid #30363d;
-}
-
-.preview-prompt-dismiss:hover {
-  background: #30363d;
-  color: #e6edf3;
 }
 
 /* ── Git Diff Panel ─────────────────────────────────── */
@@ -1752,28 +1539,13 @@ header h1 {
     word-break: break-all;
   }
 
-  .preview-toolbar {
-    padding: 2px 4px;
-    font-size: 12px;
-    gap: 4px;
-  }
-
-  .preview-btn {
-    font-size: 10px;
-    padding: 2px 6px;
-  }
-
   /* Mobile: hide split view — tab layout only */
-  .split-preview {
-    display: none;
-  }
-
   .split-diff {
     display: none;
   }
 
   /* When split view is hidden, restore vertical card stacking */
-  .tab-panel.has-preview {
+  .tab-panel.has-split {
     flex-direction: column;
   }
 

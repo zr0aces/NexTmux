@@ -75,10 +75,6 @@ To support developer workflows, the TmuxHub interface must implement the followi
 * **Git Diff Inspector**: A toggleable side panel on each worker card displaying:
   * A list of untracked, modified, added, or deleted repository files.
   * Line-by-line, syntax-highlighted code comparisons (diffs) against the git tree.
-* **Localhost Port Preview**: Auto-detects local web servers running inside worker sessions, offering:
-  * Split-screen iframes to view local sites side-by-side with logs.
-  * Secure external Cloudflare proxy URLs for remote access.
-  * Action toast alerts for API/non-HTML endpoints.
 
 ### 2.7 Notification & Alert Integrations
 * **Outbound Telegram Alerts**: Delivers notifications detailing the stalled session name, matched patterns, and reset durations.

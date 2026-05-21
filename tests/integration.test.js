@@ -89,7 +89,6 @@ process.exit(0);
         DASHBOARD_PASSWORD: PASSWORD,
         PATH: mockBinDir + path.delimiter + process.env.PATH,
         AI_MONITOR_ENABLED: "0",
-        ENABLE_PREVIEW: "0",
         ENABLE_TUNNEL: "0",
         ENABLE_TUNNEL_HEALTHCHECK: "0"
       }

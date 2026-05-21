@@ -24,13 +24,6 @@ function openGitDiff(workerId) {
     return;
   }
 
-  // If a preview split is open, close it first (only one side panel at a time)
-  const existingPreview = workerPanel.querySelector('.split-preview');
-  if (existingPreview) {
-    const previewId = existingPreview.dataset.previewId;
-    if (previewId) closeSplitPreview(workerId, previewId);
-  }
-
   // Resize handle
   const handle = document.createElement('div');
   handle.className = 'split-resize-handle';
@@ -73,7 +66,7 @@ function openGitDiff(workerId) {
     toggleBtn.textContent = isCollapsed ? '▶' : '◀';
   });
 
-  workerPanel.classList.add('has-preview');
+  workerPanel.classList.add('has-split');
   workerPanel.appendChild(handle);
   workerPanel.appendChild(container);
 
@@ -214,10 +207,7 @@ function closeGitDiff(workerId) {
 
   var workerPanel = document.querySelector('.tab-panel[data-id="' + workerId + '"]');
   if (workerPanel) {
-    // Only remove the has-preview class if no split-preview is still open
-    if (!workerPanel.querySelector('.split-preview')) {
-      workerPanel.classList.remove('has-preview');
-    }
+    workerPanel.classList.remove('has-split');
     var card = workerPanel.querySelector('.card');
     if (card) card.style.width = '';
   }

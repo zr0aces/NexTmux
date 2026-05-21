@@ -151,8 +151,7 @@ tmuxhub/
 │   ├── sessionStateManager.js # Metadata persistence & debouncing
 │   ├── messageProcessor.js # Auto-response menu/prompt parser
 │   ├── tmuxService.js     # Native tmux exec/subprocess integration
-│   ├── authService.js     # Session management & login rate limiting
-│   └── portDetector.js    # Localhost port detection & secure preview tunnels
+│   └── authService.js     # Session management & login rate limiting
 ├── public/
 │   ├── style.css          # Styles
 │   └── js/
