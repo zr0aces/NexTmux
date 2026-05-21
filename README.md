@@ -127,6 +127,9 @@ Detailed deployment guides and configurations have been moved to the [docs/](doc
 * **[Installation & Deployment Guide](docs/installation.md)** — Step-by-step setup guides for macOS daemon (`launchd`), Ubuntu/Debian services, Docker Compose setups, and Cloudflare Secure Tunnels.
 * **[User Guide & Dashboard Usage](docs/usage.md)** — Learn how to log in, scan/attach existing sessions, leverage bidirectional mirroring, and interact with the virtual mechanical keyboard.
 * **[AI State Monitoring & Alerts Setup](docs/ai_monitoring.md)** — Setup guide for configuring Telegram outbound alerts, tuning idle thresholds, and modifying regex patterns.
+* **[Technical Specification](docs/technical_spec.md)** — In-depth architectural details, client-server data flows, security mechanisms, and core capability implementations of TmuxHub.
+* **[Technical Requirements](docs/technical_requirements.md)** — Prerequisites, system requirements, network ports, permissions, and browser compatibility checklists.
+* **[User & Functional Requirements](docs/user_requirements.md)** — Core user workflows when starting projects and a comprehensive workspace feature catalog.
 
 ---
 
