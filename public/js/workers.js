@@ -543,7 +543,13 @@ function scanSessions() {
       if (!found.length) { alert('No new tmux sessions found.'); return; }
       const names = found.map(f => '• ' + f.sessionName + ' (' + displayPath(f.cwd) + ')').join('\n');
       if (!confirm('Add these sessions to dashboard?\n\n' + names)) return;
-      found.forEach(f => apiPost('/api/attach', { sessionName: f.sessionName, cwd: f.cwd }));
+      // Sequential attach: wait for each response before sending the next to
+      // prevent race-condition duplicates when attaches land before spawned
+      // WebSocket events reach the client.
+      found.reduce(
+        (chain, f) => chain.then(() => apiPost('/api/attach', { sessionName: f.sessionName, cwd: f.cwd })),
+        Promise.resolve()
+      );
     })
     .catch(() => { btn.textContent = '🔍'; });
 }

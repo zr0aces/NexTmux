@@ -826,6 +826,10 @@ const server = http.createServer(async (req, res) => {
       return json(res, 400, { error: "invalid sessionName" });
     }
     const cwd = body.cwd;
+    // Guard: if a worker already tracks this sessionName, return its existing id
+    // to prevent duplicate tabs polling the same tmux pane.
+    const existingEntry = [...workers.entries()].find(([, w]) => w.sessionName === sessionName);
+    if (existingEntry) return json(res, 200, { id: existingEntry[0] });
     const id = String(nextId++);
     workers.set(id, {
       sessionName,
