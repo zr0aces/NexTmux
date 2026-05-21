@@ -809,7 +809,6 @@ const server = http.createServer(async (req, res) => {
     for (const line of raw.trim().split("\n")) {
       if (!line) continue;
       const [sessionName, cwd] = line.split("|");
-      if (!sessionName.startsWith("term-")) continue;
       if (existingNames.has(sessionName)) continue;
       found.push({ sessionName, cwd: cwd || "unknown" });
     }

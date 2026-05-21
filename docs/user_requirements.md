@@ -41,7 +41,7 @@ To support developer workflows, the TmuxHub interface must implement the followi
 
 ### 2.2 Session Creation & Attaching
 * **Interactive Spawn Form**: A sliding header toolbar containing inputs for CWD paths and command definitions.
-* **Session Scanner**: Searches the host operating system for any running tmux sessions named with the `term-` prefix that are not currently displayed on the dashboard.
+* **Session Scanner**: Searches the host operating system for any running tmux sessions that are not currently displayed on the dashboard.
 * **Attach Discovered Sessions**: Imports discovered sessions onto the active dashboard in a single click, recovering log history.
 
 ### 2.3 Interactive Terminal Console
