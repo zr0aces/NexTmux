@@ -228,3 +228,43 @@ function refreshGitDiff(workerId) {
     setTimeout(function() { loadFileDiff(workerId, selectedFile); }, 300);
   }
 }
+
+function initSplitResize(handle, workerPanel) {
+  const card = workerPanel.querySelector('.card');
+  if (!card) return;
+
+  let isDragging = false;
+
+  handle.addEventListener('mousedown', function(e) {
+    isDragging = true;
+    handle.classList.add('dragging');
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+    e.preventDefault();
+  });
+
+  document.addEventListener('mousemove', function(e) {
+    if (!isDragging) return;
+    const containerRect = workerPanel.getBoundingClientRect();
+    const newWidth = e.clientX - containerRect.left;
+    const minWidth = 100;
+    const maxWidth = containerRect.width - 100;
+    if (newWidth >= minWidth && newWidth <= maxWidth) {
+      card.style.width = newWidth + 'px';
+      if (typeof scheduleSendResize === 'function') {
+        scheduleSendResize();
+      }
+    }
+  });
+
+  document.addEventListener('mouseup', function() {
+    if (!isDragging) return;
+    isDragging = false;
+    handle.classList.remove('dragging');
+    document.body.style.cursor = '';
+    document.body.style.userSelect = '';
+    if (typeof sendResize === 'function') {
+      sendResize();
+    }
+  });
+}

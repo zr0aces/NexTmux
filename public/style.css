@@ -1450,7 +1450,7 @@ header h1 {
 @media (max-width: 768px) {
   .layout-group,
   .header-divider {
-    display: none;
+    display: none !important;
   }
 
   header {
@@ -1537,6 +1537,12 @@ header h1 {
     margin-top: 2px;
   }
 
+  /* Slide-up drawer animation for mobile favorites list */
+  @keyframes slide-up-drawer {
+    from { transform: translateY(100%); }
+    to { transform: translateY(0); }
+  }
+
   .dir-dropdown {
     left: 0;
     right: 0;
@@ -1546,6 +1552,14 @@ header h1 {
     border-radius: 12px 12px 0 0;
     max-height: 60vh;
     overflow-y: auto;
+    border: 1px solid var(--border-color);
+    border-bottom: none;
+    box-shadow: 0 -8px 32px rgba(0, 0, 0, 0.5);
+  }
+
+  .dir-dropdown.open {
+    display: block;
+    animation: slide-up-drawer 0.25s cubic-bezier(0.1, 0.76, 0.55, 0.94) !important;
   }
 
   .dir-item span {
@@ -1580,8 +1594,9 @@ header h1 {
   .card-actions {
     width: auto;
     justify-content: flex-end;
-    gap: 4px;
+    gap: 6px;
     flex-shrink: 0;
+    align-items: center;
   }
 
   .badge {
@@ -1592,16 +1607,20 @@ header h1 {
   .diff-btn,
   .kill-btn,
   .monitor-mode-selector {
-    height: 20px;
-    font-size: 10px;
-    padding: 0 6px;
-    border-radius: 3px;
+    height: 28px;
+    font-size: 11px;
+    padding: 0 10px;
+    border-radius: 6px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
   }
 
   .monitor-mode-selector {
-    width: 24px;
+    width: 32px;
     padding: 0;
-    font-size: 11px;
+    font-size: 12px;
+    text-align-last: center;
   }
 
   .logs {

@@ -3,18 +3,26 @@
 let layout = localStorage.getItem('layout') || 'tab';
 let activeTab = null;
 
+function getEffectiveLayout() {
+  if (window.innerWidth <= 768) {
+    return 'tab';
+  }
+  return layout;
+}
+
 function syncCardPlacement() {
   const tabContent = document.getElementById('tab-content');
   const splitContent = document.getElementById('split-content');
   const panels = Array.from(document.querySelectorAll('.tab-panel'));
+  const effLayout = getEffectiveLayout();
   
-  if (layout === 'tab') {
+  if (effLayout === 'tab') {
     panels.forEach(p => {
       if (p.parentElement !== tabContent) {
         tabContent.appendChild(p);
       }
     });
-  } else if (layout === 'split') {
+  } else if (effLayout === 'split') {
     const tabOrder = Array.from(document.querySelectorAll('.tab')).map(t => t.dataset.id);
     tabOrder.forEach(id => {
       const p = panels.find(panel => panel.dataset.id === id);
@@ -31,14 +39,29 @@ function setLayout(mode) {
   
   syncCardPlacement();
 
-  document.getElementById('tab-mode').style.display = mode === 'tab' ? 'flex' : 'none';
-  document.getElementById('split-mode').style.display = mode === 'split' ? 'block' : 'none';
-  document.getElementById('split-content').style.display = mode === 'split' ? 'grid' : 'none';
+  const effLayout = getEffectiveLayout();
+  document.getElementById('tab-mode').style.display = effLayout === 'tab' ? 'flex' : 'none';
+  document.getElementById('split-mode').style.display = effLayout === 'split' ? 'block' : 'none';
+  document.getElementById('split-content').style.display = effLayout === 'split' ? 'grid' : 'none';
   document.getElementById('layout-tab-btn').classList.toggle('layout-active', mode === 'tab');
   document.getElementById('layout-split-btn').classList.toggle('layout-active', mode === 'split');
   updateSplitGrid();
   setTimeout(sendResize, 50);
 }
+
+window.addEventListener('resize', () => {
+  syncCardPlacement();
+  const effLayout = getEffectiveLayout();
+  const tabModeEl = document.getElementById('tab-mode');
+  const splitModeEl = document.getElementById('split-mode');
+  const splitContentEl = document.getElementById('split-content');
+  if (tabModeEl) tabModeEl.style.display = effLayout === 'tab' ? 'flex' : 'none';
+  if (splitModeEl) splitModeEl.style.display = effLayout === 'split' ? 'block' : 'none';
+  if (splitContentEl) splitContentEl.style.display = effLayout === 'split' ? 'grid' : 'none';
+  if (typeof scheduleSendResize === 'function') {
+    scheduleSendResize();
+  }
+});
 
 function updateSplitGrid() {
   const sc = document.getElementById('split-content');
@@ -132,5 +155,37 @@ if (tabBar) {
 
   tabBar.addEventListener('drop', () => {
     indicator.classList.remove('show');
+    saveTabOrder();
+    syncCardPlacement();
   });
+}
+
+function saveTabOrder() {
+  const order = Array.from(document.querySelectorAll('.tab')).map(t => t.dataset.sessionName || t.dataset.id);
+  localStorage.setItem('tmuxhub.tabOrder.v1', JSON.stringify(order));
+}
+
+function restoreTabOrder() {
+  const raw = localStorage.getItem('tmuxhub.tabOrder.v1');
+  if (!raw) return;
+  try {
+    const order = JSON.parse(raw);
+    if (!Array.isArray(order)) return;
+    const tabBarEl = document.getElementById('tab-bar');
+    if (!tabBarEl) return;
+    const tabs = Array.from(document.querySelectorAll('.tab'));
+    order.forEach(name => {
+      const tab = tabs.find(t => (t.dataset.sessionName || t.dataset.id) === name);
+      if (tab) {
+        // Since indicator is a child, make sure we append before or handle it cleanly.
+        // Actually, just appendChild moves the tab to the end of the tab-bar.
+        tabBarEl.appendChild(tab);
+      }
+    });
+    // Ensure indicator stays at the end of tab-bar if it exists
+    const indicator = document.getElementById('tab-drop-indicator');
+    if (indicator) tabBarEl.appendChild(indicator);
+    
+    syncCardPlacement();
+  } catch (e) {}
 }

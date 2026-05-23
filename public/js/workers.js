@@ -139,7 +139,8 @@ function ensureCard(id, cwd, status, logs, cmd, reason, monitorMeta) {
   panel.appendChild(card);
 
   panel.addEventListener('mousedown', () => {
-    if (layout === 'split' && activeTab !== id) {
+    const effLayout = typeof getEffectiveLayout === 'function' ? getEffectiveLayout() : layout;
+    if (effLayout === 'split' && activeTab !== id) {
       selectTab(id);
     }
   });
@@ -173,7 +174,8 @@ function ensureCard(id, cwd, status, logs, cmd, reason, monitorMeta) {
 
   bindCard(id, panel);
 
-  if (layout === 'tab') {
+  const effLayout = typeof getEffectiveLayout === 'function' ? getEffectiveLayout() : layout;
+  if (effLayout === 'tab') {
     document.getElementById('tab-content').appendChild(panel);
   } else {
     document.getElementById('split-content').appendChild(panel);
@@ -527,6 +529,9 @@ function removeWorker(id) {
   const card = document.getElementById('card-' + id);
   if (card) card.remove();
   updateSplitGrid();
+  if (typeof saveTabOrder === 'function') {
+    saveTabOrder();
+  }
 }
 
 function updateCwd(id, cwd) {

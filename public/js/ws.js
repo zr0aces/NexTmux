@@ -1,17 +1,21 @@
 // ── WebSocket & API Communication ──
 
 let ws;
+let reconnectInterval = 1000;
+const MAX_RECONNECT_INTERVAL = 30000;
 
 function initWS() {
   const proto = location.protocol === 'https:' ? 'wss' : 'ws';
   ws = new WebSocket(proto + '://' + location.host);
   ws.onopen = () => {
     document.getElementById('status-dot').classList.remove('off');
+    reconnectInterval = 1000; // reset on success
     sendResize();
   };
   ws.onclose = () => {
     document.getElementById('status-dot').classList.add('off');
-    setTimeout(initWS, 2000);
+    setTimeout(initWS, reconnectInterval);
+    reconnectInterval = Math.min(reconnectInterval * 2, MAX_RECONNECT_INTERVAL);
   };
   ws.onmessage = e => handleMsg(JSON.parse(e.data));
 }
@@ -125,11 +129,16 @@ function apiGet(url) {
 
 function loadAll() {
   apiGet('/api/workers')
-    .then(list => list.forEach(w => {
-      ensureCard(w.id, w.cwd, w.status, w.logs, w.cmd, w.exitReason || null, w);
-      if (w.aiState) updateAIState(w.id, w.aiState);
-      updateMonitorMeta(w.id, w);
-    }));
+    .then(list => {
+      list.forEach(w => {
+        ensureCard(w.id, w.cwd, w.status, w.logs, w.cmd, w.exitReason || null, w);
+        if (w.aiState) updateAIState(w.id, w.aiState);
+        updateMonitorMeta(w.id, w);
+      });
+      if (typeof restoreTabOrder === 'function') {
+        restoreTabOrder();
+      }
+    });
 }
 
 function loadConfig() {
