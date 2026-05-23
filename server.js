@@ -554,8 +554,13 @@ function json(res, code, obj) {
 
 
 const server = http.createServer(async (req, res) => {
-  const { method } = req;
-  const url = req.url.split("?")[0];
+  try {
+    res.setHeader("X-Content-Type-Options", "nosniff");
+    res.setHeader("X-Frame-Options", "DENY");
+    res.setHeader("Referrer-Policy", "no-referrer-when-downgrade");
+
+    const { method } = req;
+    const url = req.url.split("?")[0];
 
   if (method === "OPTIONS") {
     res.writeHead(204, { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Headers": "Content-Type" });
@@ -854,7 +859,12 @@ const server = http.createServer(async (req, res) => {
     if (!w) return json(res, 404, { error: 'worker not found' });
 
     // Prevent path traversal
-    if (file && file.includes('..')) return json(res, 400, { error: 'invalid file path' });
+    if (file) {
+      const resolvedPath = path.resolve(w.cwd, file);
+      if (!resolvedPath.startsWith(path.resolve(w.cwd))) {
+        return json(res, 400, { error: 'invalid file path' });
+      }
+    }
 
     const cwd = w.cwd;
 
@@ -912,6 +922,12 @@ const server = http.createServer(async (req, res) => {
   }
 
   json(res, 404, { error: "not found" });
+  } catch (err) {
+    console.error("HTTP request error:", err);
+    if (!res.writableEnded) {
+      json(res, 500, { error: "internal_server_error", message: err.message });
+    }
+  }
 });
 
 wss = new WebSocketServer({ server });
@@ -921,6 +937,8 @@ wss.on('connection', (ws, req) => {
     ws.close(1008, "unauthorized");
     return;
   }
+  ws.isAlive = true;
+  ws.on('pong', () => { ws.isAlive = true; });
   ws.on('message', raw => {
     try {
       const msg = JSON.parse(raw);
@@ -946,8 +964,18 @@ wss.on('connection', (ws, req) => {
     } catch (e) {}
   });
   ws.on('close', () => clientSizes.delete(ws));
+});
 
+const heartbeatInterval = setInterval(() => {
+  wss.clients.forEach(ws => {
+    if (ws.isAlive === false) return ws.terminate();
+    ws.isAlive = false;
+    ws.ping();
+  });
+}, 30000);
 
+server.on('close', () => {
+  clearInterval(heartbeatInterval);
 });
 
 

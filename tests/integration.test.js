@@ -225,4 +225,30 @@ test("Integration tests for TmuxHub API", async (t) => {
     assert.equal(term2WorkerAfter.status, "running");
     assert.equal(term2WorkerAfter.aiState || null, null);
   });
+
+  // 6. Security Headers test
+  await t.test("HTTP responses should include security headers", async () => {
+    const res = await request("GET", "/");
+    assert.equal(res.status, 200);
+    assert.equal(res.headers["x-content-type-options"], "nosniff");
+    assert.equal(res.headers["x-frame-options"], "DENY");
+    assert.equal(res.headers["referrer-policy"], "no-referrer-when-downgrade");
+  });
+
+  // 7. Git diff path traversal security test
+  await t.test("GET /api/git-diff should block paths outside the working directory", async () => {
+    const workersList = await request("GET", "/api/workers");
+    const term2Worker = workersList.body.find(w => w.sessionName === "term-2");
+    assert.ok(term2Worker);
+    const term2Id = term2Worker.id;
+
+    // Attempt traversal path
+    const res = await request("GET", `/api/git-diff?id=${term2Id}&file=/etc/passwd`);
+    assert.equal(res.status, 400);
+    assert.equal(res.body.error, "invalid file path");
+
+    const res2 = await request("GET", `/api/git-diff?id=${term2Id}&file=../../passwd`);
+    assert.equal(res2.status, 400);
+    assert.equal(res2.body.error, "invalid file path");
+  });
 });
