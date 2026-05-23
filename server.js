@@ -1,7 +1,7 @@
 require("dotenv").config();
 const http = require("http");
 const net = require("net");
-const { execSync, execFileSync, spawn } = require("child_process");
+const { execSync, execFileSync, spawn, execFile } = require("child_process");
 const fs = require("fs");
 const path = require("path");
 const { WebSocketServer } = require("ws");
@@ -53,6 +53,39 @@ const SHELL_COMMANDS = new Set(["bash", "zsh", "sh", "fish"]);
 const issueAlertTime = new Map(); // key: alert key, value: timestamp
 const ISSUE_ALERT_COOLDOWN_MS = 120000; // 120s cooldown per issue key
 const RATE_LIMIT_PATTERNS = RATE_LIMIT_PATTERN_NAMES;
+
+let globalPaneInfo = new Map(); // sessionName -> { cwd, paneCmd }
+let lastGlobalPaneFetch = 0;
+const GLOBAL_PANE_FETCH_INTERVAL = 3000; // fetch every 3 seconds
+
+async function updateGlobalPaneInfo() {
+  const now = Date.now();
+  if (now - lastGlobalPaneFetch < GLOBAL_PANE_FETCH_INTERVAL) return;
+  lastGlobalPaneFetch = now;
+  try {
+    const raw = await tmuxExecAsync("list-panes", "-a", "-F", "#{session_name}|||#{pane_current_path}|||#{pane_current_command}");
+    const nextInfo = new Map();
+    for (const line of raw.trim().split("\n")) {
+      if (!line) continue;
+      const parts = line.split("|||");
+      if (parts.length >= 3) {
+        nextInfo.set(parts[0], { cwd: parts[1] || "", paneCmd: parts[2] || "" });
+      }
+    }
+    globalPaneInfo = nextInfo;
+  } catch (e) {
+    // Silent fail, will retry next interval
+  }
+}
+
+function gitExecAsync(cwd, args, maxBuffer = 10 * 1024 * 1024) {
+  return new Promise((resolve, reject) => {
+    execFile('git', ['-C', cwd, ...args], { encoding: 'utf8', maxBuffer }, (err, stdout, stderr) => {
+      if (err) reject(err);
+      else resolve(stdout);
+    });
+  });
+}
 
 function loadConfig() {
   const configPath = path.join(__dirname, "config.json");
@@ -337,10 +370,11 @@ async function pollOutput(id) {
   const newLinesCount = getNewLinesCount(output, lastCapture.get(id));
   w.totalLinesCount = (w.totalLinesCount || 0) + newLinesCount;
 
-  // Fetch cwd and pane command in a single async tmux call (saves one sub-process per poll)
-  const _info = (await tmuxExecAsync("display-message", "-t", w.sessionName, "-p", "#{pane_current_path}|||#{pane_current_command}")).trim().split("|||");
-  const currentCwd = _info[0] || "";
-  const currentPaneCmd = _info[1] || "";
+  // Query consolidated global pane info (saves spawning one sub-process per poll)
+  await updateGlobalPaneInfo();
+  const cachedInfo = globalPaneInfo.get(w.sessionName);
+  const currentCwd = cachedInfo ? cachedInfo.cwd : w.cwd;
+  const currentPaneCmd = cachedInfo ? cachedInfo.paneCmd : w.lastPaneCommand;
   if (currentCwd && currentCwd !== w.cwd) {
     w.cwd = currentCwd;
     broadcast({ type: "cwd", id, cwd: currentCwd });
@@ -534,6 +568,7 @@ function readBody(req, maxBytes = 65536) {
       if (size > maxBytes) { req.destroy(); rej(new Error("request body too large")); return; }
       buf += c;
     });
+    req.on("error", err => rej(err));
     req.on("end", () => res(buf));
   });
 }
@@ -591,10 +626,20 @@ const server = http.createServer(async (req, res) => {
   if (method === "GET" && MIME[ext]) {
     const safePath = path.normalize(url).replace(/^(\.\.[\/\\])+/, '');
     const filePath = path.join(__dirname, "public", safePath);
-    if (filePath.startsWith(path.join(__dirname, "public")) && fs.existsSync(filePath)) {
-      if (!staticCache.has(filePath)) staticCache.set(filePath, fs.readFileSync(filePath));
-      res.writeHead(200, { "Content-Type": MIME[ext] + "; charset=utf-8" });
-      return res.end(staticCache.get(filePath));
+    const publicRoot = path.join(__dirname, "public" + path.sep);
+    if (filePath.startsWith(publicRoot)) {
+      try {
+        const stat = await fs.promises.stat(filePath);
+        if (stat.isFile()) {
+          if (!staticCache.has(filePath)) {
+            staticCache.set(filePath, await fs.promises.readFile(filePath));
+          }
+          res.writeHead(200, { "Content-Type": MIME[ext] + "; charset=utf-8" });
+          return res.end(staticCache.get(filePath));
+        }
+      } catch (err) {
+        // Fall through to 404
+      }
     }
   }
 
@@ -602,12 +647,11 @@ const server = http.createServer(async (req, res) => {
     if (!auth(req)) return json(res, 401, { error: "unauthorized" });
     const configPath = path.join(__dirname, "config.json");
     let config = {};
-    if (fs.existsSync(configPath)) {
-      try {
-        config = JSON.parse(fs.readFileSync(configPath, "utf8"));
-      } catch {
-        config = {};
-      }
+    try {
+      const data = await fs.promises.readFile(configPath, "utf8");
+      config = JSON.parse(data);
+    } catch {
+      config = {};
     }
     const safeConfig = {
       basePath: config.basePath,
@@ -693,7 +737,7 @@ const server = http.createServer(async (req, res) => {
     const rawCwd = body.cwd || process.cwd();
     const resolvedCwd = path.resolve(rawCwd);
     try {
-      const stat = fs.statSync(resolvedCwd);
+      const stat = await fs.promises.stat(resolvedCwd);
       if (!stat.isDirectory()) {
         return json(res, 400, { ok: false, error: "Invalid path: not a directory." });
       }
@@ -868,23 +912,22 @@ const server = http.createServer(async (req, res) => {
 
     const cwd = w.cwd;
 
-    const execOpts = { encoding: 'utf8', maxBuffer: 10 * 1024 * 1024, stdio: 'pipe' };
     try {
       // Verify this is a git repository
-      execFileSync('git', ['-C', cwd, 'rev-parse', '--is-inside-work-tree'], execOpts);
+      await gitExecAsync(cwd, ['rev-parse', '--is-inside-work-tree']);
 
       if (file) {
         // Per-file diff — against HEAD when available, otherwise against the working tree
         let diff = '';
         try {
-          diff = execFileSync('git', ['-C', cwd, '--no-color', 'diff', 'HEAD', '--', file], execOpts);
+          diff = await gitExecAsync(cwd, ['--no-color', 'diff', 'HEAD', '--', file]);
         } catch (_) {
-          diff = execFileSync('git', ['-C', cwd, '--no-color', 'diff', '--', file], execOpts);
+          diff = await gitExecAsync(cwd, ['--no-color', 'diff', '--', file]);
         }
         return json(res, 200, { diff });
       } else {
         // File list: git status --porcelain (includes untracked files)
-        const status = execFileSync('git', ['-C', cwd, 'status', '--porcelain'], execOpts);
+        const status = await gitExecAsync(cwd, ['status', '--porcelain']);
         const files = status.trim().split('\n').filter(Boolean).map(line => {
           const xy = line.substring(0, 2).trim();
           const filePath = line.substring(3);
@@ -899,7 +942,7 @@ const server = http.createServer(async (req, res) => {
 
         let stat = '';
         try {
-          stat = execFileSync('git', ['-C', cwd, '--no-color', 'diff', '--stat', 'HEAD'], execOpts).trim();
+          stat = (await gitExecAsync(cwd, ['--no-color', 'diff', '--stat', 'HEAD'])).trim();
         } catch (_) { /* no HEAD yet */ }
 
         return json(res, 200, { files, stat });
@@ -1039,6 +1082,9 @@ function startTunnel() {
   }
   tunnelProcess = spawn("cloudflared", ["tunnel", "--url", `http://localhost:${PORT}`], {
     stdio: ["ignore", "pipe", "pipe"],
+  });
+  tunnelProcess.on("error", (err) => {
+    console.error("☁️  cloudflared tunnel process error:", err.message);
   });
   const handleData = (data) => {
     const text = data.toString();
