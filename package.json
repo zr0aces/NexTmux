@@ -7,7 +7,7 @@
     "node": ">=22"
   },
   "name": "tmuxhub",
-  "version": "2026.5.14",
+  "version": "2026.5.15",
   "main": "index.js",
   "scripts": {
     "start": "node server.js",
