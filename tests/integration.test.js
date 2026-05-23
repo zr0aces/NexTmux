@@ -250,5 +250,26 @@ test("Integration tests for TmuxHub API", async (t) => {
     const res2 = await request("GET", `/api/git-diff?id=${term2Id}&file=../../passwd`);
     assert.equal(res2.status, 400);
     assert.equal(res2.body.error, "invalid file path");
+
+    // Prefix collision path: previously could bypass startsWith() checks.
+    const res3 = await request("GET", `/api/git-diff?id=${term2Id}&file=../2-sibling/path.txt`);
+    assert.equal(res3.status, 400);
+    assert.equal(res3.body.error, "invalid file path");
+  });
+
+  // 8. Input payload validation test
+  await t.test("POST /api/input should reject malformed payloads", async () => {
+    const workersRes = await request("GET", "/api/workers");
+    assert.equal(workersRes.status, 200);
+    const worker = workersRes.body.find(w => w.sessionName === "term-2");
+    assert.ok(worker);
+
+    const badText = await request("POST", "/api/input", { id: worker.id, text: { nope: true } });
+    assert.equal(badText.status, 400);
+    assert.equal(badText.body.error, "invalid input payload");
+
+    const badId = await request("POST", "/api/input", { id: null, text: "echo hello" });
+    assert.equal(badId.status, 400);
+    assert.equal(badId.body.error, "invalid input payload");
   });
 });

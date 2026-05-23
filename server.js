@@ -504,7 +504,12 @@ async function pollOutput(id) {
 
   broadcastMonitorMeta(id);
   } catch (e) {
-    // Swallow poll errors to prevent the interval from dying silently
+    // Keep polling alive, but emit sampled warnings for visibility.
+    w.pollErrorCount = (w.pollErrorCount || 0) + 1;
+    if (w.pollErrorCount <= 3 || w.pollErrorCount % 30 === 0) {
+      const msg = e && e.message ? e.message : String(e);
+      console.warn(`pollOutput failed for ${w.sessionName} (#${id}) [${w.pollErrorCount}]`, msg);
+    }
   } finally {
     if (w) w._polling = false;
   }
@@ -513,6 +518,7 @@ async function pollOutput(id) {
 function sendInput(id, text) {
   const w = workers.get(id);
   if (!w) return false;
+  if (typeof text !== "string") return false;
   if (w.status === "completed") {
     w.status = "running";
     w.aiState = null;
@@ -598,7 +604,7 @@ const server = http.createServer(async (req, res) => {
     const url = req.url.split("?")[0];
 
   if (method === "OPTIONS") {
-    res.writeHead(204, { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Headers": "Content-Type" });
+    res.writeHead(204);
     return res.end();
   }
 
@@ -752,6 +758,9 @@ const server = http.createServer(async (req, res) => {
     const { ok, body } = await parseBody(req);
     if (!ok || !body) return json(res, 400, { error: "invalid request body" });
     const { id, text } = body;
+    if ((typeof id !== "string" && typeof id !== "number") || typeof text !== "string") {
+      return json(res, 400, { ok: false, error: "invalid input payload" });
+    }
     const inputOk = sendInput(id, text);
     return json(res, 200, { ok: inputOk });
   }
@@ -904,8 +913,10 @@ const server = http.createServer(async (req, res) => {
 
     // Prevent path traversal
     if (file) {
-      const resolvedPath = path.resolve(w.cwd, file);
-      if (!resolvedPath.startsWith(path.resolve(w.cwd))) {
+      const cwdRoot = path.resolve(w.cwd);
+      const resolvedPath = path.resolve(cwdRoot, file);
+      const relative = path.relative(cwdRoot, resolvedPath);
+      if (relative.startsWith("..") || path.isAbsolute(relative)) {
         return json(res, 400, { error: 'invalid file path' });
       }
     }
@@ -991,20 +1002,23 @@ wss.on('connection', (ws, req) => {
         if (msg.id && workers.has(String(msg.id))) {
           resizeWorker(String(msg.id), size.cols, size.rows);
         } else {
-          workers.forEach(w => {
-            resizeWorker(w.id, size.cols, size.rows);
+          workers.forEach((_, workerId) => {
+            resizeWorker(String(workerId), size.cols, size.rows);
           });
         }
       }
       if (msg.type === 'active') {
         const size = clientSizes.get(ws);
         if (size) {
-          workers.forEach(w => {
-            resizeWorker(w.id, size.cols, size.rows);
+          workers.forEach((_, workerId) => {
+            resizeWorker(String(workerId), size.cols, size.rows);
           });
         }
       }
-    } catch (e) {}
+    } catch (e) {
+      const msg = e && e.message ? e.message : String(e);
+      console.warn("WS message handling failed:", msg);
+    }
   });
   ws.on('close', () => clientSizes.delete(ws));
 });
