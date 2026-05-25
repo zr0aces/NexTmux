@@ -30,7 +30,7 @@ function getSessionName(id) {
 }
 
 function getTitleBase(id, cmd) {
-  return customTitles[getSessionName(id)] || cmd || 'claude';
+  return customTitles[getSessionName(id)] || cmd || '';
 }
 
 function trimTitle(text) {
@@ -51,14 +51,19 @@ function escapeHtml(text) {
 function renderTitle(id, cwd, cmd) {
   const tab = document.querySelector('.tab[data-id="' + id + '"]');
   const tabCwd = cwd || (tab && tab.dataset.cwd) || '';
-  const tabCmd = cmd || (tab && tab.dataset.cmd) || 'claude';
+  const tabCmd = cmd || (tab && tab.dataset.cmd) || '';
   const sName = (tab && tab.dataset.sessionName) || id;
   const folder = tabCwd.replace(/\/$/, '').split('/').pop() || tabCwd;
   let text = '';
   if (customTitles[sName]) {
     text = '#' + id + ' ' + customTitles[sName];
   } else {
-    text = '#' + id + ' ' + tabCmd + ' · ' + folder;
+    const parts = ['#' + id];
+    if (tabCmd) parts.push(tabCmd);
+    if (folder) parts.push(folder);
+    text = tabCmd && folder ? '#' + id + ' ' + tabCmd + ' · ' + folder
+         : tabCmd ? '#' + id + ' ' + tabCmd
+         : '#' + id + ' · ' + folder;
   }
   const elLabel = document.getElementById('tab-label-' + id);
   if (elLabel) elLabel.textContent = text;
@@ -76,7 +81,7 @@ function killBtnHtml(id, status) {
 function ensureCard(id, cwd, status, logs, cmd, reason, monitorMeta) {
   if (document.getElementById('card-' + id)) return;
 
-  const cmdLabel = cmd || 'claude';
+  const cmdLabel = cmd || '';
   const card = document.createElement('div');
   card.className = 'card';
   card.id = 'card-' + id;
@@ -152,7 +157,7 @@ function ensureCard(id, cwd, status, logs, cmd, reason, monitorMeta) {
   tab.dataset.cmd = cmdLabel;
   if (monitorMeta && monitorMeta.sessionName) tab.dataset.sessionName = monitorMeta.sessionName;
   var folder = cwd.replace(/\/$/, '').split('/').pop() || cwd;
-  tab.innerHTML = '<span class="tab-dot' + (status === 'stopped' ? ' stopped' : '') + (status === 'completed' ? ' completed' : '') + '" id="tab-dot-' + id + '"></span><span class="tab-label" id="tab-label-' + id + '">#' + id + ' ' + escapeHtml(cmd || 'claude') + ' · ' + escapeHtml(folder) + '</span>';
+  tab.innerHTML = '<span class="tab-dot' + (status === 'stopped' ? ' stopped' : '') + (status === 'completed' ? ' completed' : '') + '" id="tab-dot-' + id + '"></span><span class="tab-label" id="tab-label-' + id + '">#' + id + ' ' + escapeHtml(cmd || '') + (folder ? ' · ' + escapeHtml(folder) : '') + '</span>';
   tab.addEventListener('click', () => selectTab(id));
   tab.addEventListener('dblclick', e => {
     e.stopPropagation();
@@ -607,7 +612,10 @@ function spawnSession() {
   var raw = document.getElementById('cwd-input').value.trim();
   var base = window._basePath || '/tmp';
   var cwd = raw ? (raw.startsWith('/') ? raw : base + '/' + raw) : base;
-  const cmd = document.getElementById('cmd-input').value.trim();
+  const activeStarter = document.querySelector('#session-starters .starter-btn.active');
+  const cmd = activeStarter && activeStarter.dataset.cmd !== undefined && activeStarter.dataset.cmd !== ''
+    ? activeStarter.dataset.cmd
+    : document.getElementById('cmd-input').value.trim();
   apiPost('/api/spawn', { cwd, cmd })
     .then(r => r.json().catch(() => ({})).then(d => ({ ok: r.ok, d })))
     .then(({ ok, d }) => {

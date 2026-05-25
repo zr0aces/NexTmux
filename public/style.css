@@ -286,6 +286,40 @@ header h1 {
   font-family: var(--font-mono);
 }
 
+/* ── Session Starters ──────────────────────────────── */
+
+#session-starters {
+  display: flex;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+#session-starters .starter-btn {
+  height: 32px;
+  padding: 0 12px;
+  font-size: 13px;
+  font-weight: 500;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.2s;
+  white-space: nowrap;
+}
+
+#session-starters .starter-btn:hover {
+  background: rgba(255, 255, 255, 0.07);
+  border-color: var(--border-hover);
+  color: var(--text-primary);
+}
+
+#session-starters .starter-btn.active {
+  background: rgba(59, 130, 246, 0.15);
+  border-color: var(--accent-primary);
+  color: var(--accent-hover);
+}
+
 /* ── Directory Dropdown ────────────────────────────── */
 
 .dir-wrap {
@@ -1520,20 +1554,30 @@ header h1 {
     padding: 8px 10px;
   }
 
+  #session-starters {
+    order: 0;
+    width: 100%;
+  }
+
+  #session-starters .starter-btn {
+    flex: 1;
+    font-size: 12px;
+  }
+
   #cmd-input {
     flex: 1;
     width: auto;
-    order: 0;
+    order: 1;
   }
 
-  #dir-btn { order: 1; }
-  #spawn-btn { order: 2; }
-  #scan-btn { order: 3; }
+  #dir-btn { order: 2; }
+  #spawn-btn { order: 3; }
+  #scan-btn { order: 4; }
 
   .dir-wrap {
     min-width: 0;
     flex-basis: 100%;
-    order: 4;
+    order: 5;
     margin-top: 2px;
   }
 

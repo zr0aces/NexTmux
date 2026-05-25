@@ -223,6 +223,20 @@ document.getElementById('spawn-btn').addEventListener('click', () => {
   spawnSession();
   document.getElementById('spawn-toolbar').style.display = 'none';
 });
+document.querySelectorAll('#session-starters .starter-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('#session-starters .starter-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    const cmdInput = document.getElementById('cmd-input');
+    if (btn.dataset.cmd === '') {
+      cmdInput.style.display = '';
+      cmdInput.value = '';
+      cmdInput.focus();
+    } else {
+      cmdInput.style.display = 'none';
+    }
+  });
+});
 document.getElementById('scan-btn').addEventListener('click', scanSessions);
 document.getElementById('add-fav-btn').addEventListener('click', addFavorite);
 document.getElementById('layout-tab-btn').addEventListener('click', () => setLayout('tab'));

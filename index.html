@@ -9,7 +9,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="/style.css?v=2026.5.15">
+<link rel="stylesheet" href="/style.css?v=2026.5.25">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/diff2html/bundles/css/diff2html.min.css" />
 </head>
 <body>
@@ -66,7 +66,13 @@
   </header>
 
   <div class="toolbar" id="spawn-toolbar" style="display:none">
-    <input id="cmd-input" placeholder="Command" value="claude" />
+    <div id="session-starters">
+      <button class="starter-btn active" data-cmd="claude">Claude</button>
+      <button class="starter-btn" data-cmd="codex">Codex</button>
+      <button class="starter-btn" data-cmd="agy">Agy</button>
+      <button class="starter-btn" data-cmd="">Custom</button>
+    </div>
+    <input id="cmd-input" placeholder="Command" style="display:none" />
     <div class="dir-wrap">
       <input id="cwd-input" placeholder="Working directory" />
       <div class="dir-dropdown" id="dir-dropdown">
@@ -99,7 +105,7 @@
 <script src="/js/ws.js?v=2026.5.15"></script>
 <script src="https://cdn.jsdelivr.net/npm/diff2html/bundles/js/diff2html-ui-slim.min.js"></script>
 <script src="/js/git-diff.js?v=2026.5.15"></script>
-<script src="/js/workers.js?v=2026.5.15"></script>
-<script src="/js/app.js?v=2026.5.15"></script>
+<script src="/js/workers.js?v=2026.5.25"></script>
+<script src="/js/app.js?v=2026.5.25"></script>
 </body>
 </html>
