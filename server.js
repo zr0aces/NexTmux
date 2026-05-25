@@ -117,6 +117,7 @@ function buildMonitorConfig(config) {
     linesToInspect: Math.max(10, toNumber(process.env.AI_MONITOR_LINES_TO_SCAN, cfg.linesToInspect || 120)),
     notifyCooldownMs: Math.max(1000, toNumber(process.env.AI_MONITOR_NOTIFY_COOLDOWN_MS, cfg.notifyCooldownMs || 120000)),
     patterns: Array.isArray(cfg.patterns) && cfg.patterns.length ? cfg.patterns : DEFAULT_PATTERNS,
+    cliProfiles: config?.cliProfiles || {},
   };
 }
 
@@ -151,6 +152,17 @@ const telegramService = createTelegramService({
   botToken: TELEGRAM_BOT_TOKEN,
   chatId: TELEGRAM_CHAT_ID,
 });
+
+function detectCliType(cmd) {
+  const normalized = String(cmd || "").toLowerCase().trim();
+  const baseCmd = normalized.split(/\s+|\//)[0];
+  
+  if (baseCmd === "claude" || normalized.includes("claude")) return "claude";
+  if (baseCmd === "codex" || normalized.includes("codex")) return "codex";
+  if (baseCmd === "agy" || normalized.includes("agy") || normalized.includes("antigravity")) return "agy";
+  
+  return null; // Generic fallback
+}
 
 function getBaseCommand(cmd) {
   if (!cmd) return "";
@@ -221,6 +233,7 @@ function spawnWorker(cwd, cmd) {
   cmd = cmd || appConfig.defaultCommand || "claude";
   const id = String(nextId++);
   const sessionName = "term-" + id;
+  const cliType = detectCliType(cmd);
   tmuxExec("new-session", "-d", "-s", sessionName, "-c", cwd, "-e", "CLAUDECODE=");
   tmuxExec("send-keys", "-t", sessionName, cmd, "Enter");
   const logs = [];
@@ -228,6 +241,7 @@ function spawnWorker(cwd, cmd) {
     sessionName,
     cwd,
     cmd,
+    cliType,
     logs,
     status: "running",
     expectedCmd: getBaseCommand(cmd),
@@ -238,7 +252,7 @@ function spawnWorker(cwd, cmd) {
   });
   initializeWorkerMonitorState(workers.get(id));
   startPolling(id);
-  broadcast({ type: "spawned", id, cwd, cmd, status: "running", sessionName, ...getMonitorMeta(workers.get(id)) });
+  broadcast({ type: "spawned", id, cwd, cmd, status: "running", sessionName, cliType, ...getMonitorMeta(workers.get(id)) });
   return id;
 }
 

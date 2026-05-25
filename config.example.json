@@ -28,5 +28,70 @@
       { "name": "rate_limited", "regex": "(?:you(?:'re| are) (?:rate.limited|out of (?:free )?uses)|daily limit(?:\\s+(?:hit|reached|exceeded)))" },
       { "name": "auth_required", "regex": "authentication required" }
     ]
+  },
+  "cliProfiles": {
+    "claude": {
+      "label": "Claude",
+      "enabled": true,
+      "patterns": {
+        "rate_limit": [
+          "(?:you(?:'re| are) (?:rate.limited|out of (?:free )?uses)|daily limit(?:\\s+(?:hit|reached|exceeded)))",
+          "(?:you've hit your|reached.*rate limit|usage limit)"
+        ],
+        "reset_time": "(?:try(?:\\s+again)?(?:\\s+in)?|resets?(?:\\s+(?:in|at))?|available(?:\\s+again)?\\s+in|come\\s+back\\s+in|limit\\s+resets?(?:\\s+(?:in|at))?)",
+        "usage_exceeded": "usage limit|token limit|quota exceeded",
+        "prompt_continue": "continue\\?|proceed\\?|confirm\\?",
+        "approval_needed": "do you want to|approve|allow|overwrite|replace"
+      },
+      "autoResponses": {
+        "confirm": "y",
+        "continue": "continue",
+        "reject": "n",
+        "press_enter": "",
+        "select": "1"
+      }
+    },
+    "codex": {
+      "label": "Codex",
+      "enabled": true,
+      "patterns": {
+        "rate_limit": [
+          "rate limit|quota exceeded|too many requests",
+          "exceeded.*limit|limit.*exceeded|http 429"
+        ],
+        "reset_time": "(?:retry after|try again|available in|resets? at)",
+        "usage_exceeded": "usage limit|request limit|token quota",
+        "prompt_selection": "\\[\\d+\\].*\\[\\d+\\]|(?:^|\\n)\\d+[.):-]\\s+\\w+",
+        "prompt_continue": "continue\\?|proceed\\?|confirm\\?"
+      },
+      "autoResponses": {
+        "confirm": "y",
+        "continue": "y",
+        "reject": "n",
+        "press_enter": "",
+        "select": "1"
+      }
+    },
+    "agy": {
+      "label": "Google Antigravity",
+      "enabled": true,
+      "patterns": {
+        "rate_limit": [
+          "quota exceeded|rate limit|too many requests",
+          "project.*quota|resource.*limit|rate.*exceeded"
+        ],
+        "reset_time": "(?:reset at|available at|next quota|next billing)",
+        "usage_exceeded": "quota|limit exceeded|resource exhausted",
+        "prompt_selection": "(?:select|choose).*option|\\d+\\)\\s+\\w+",
+        "approval_needed": "proceed|authorize|confirm|deploy|allow"
+      },
+      "autoResponses": {
+        "confirm": "y",
+        "continue": "y",
+        "reject": "n",
+        "press_enter": "",
+        "select": "1"
+      }
+    }
   }
 }
