@@ -409,6 +409,13 @@ async function pollOutput(id) {
     }
   }
 
+  // Detect and broadcast sessionAttached state changes
+  const nowAttached = cachedInfo?.sessionAttached === "1" ? 1 : 0;
+  if (nowAttached !== (w.sessionAttached || 0)) {
+    w.sessionAttached = nowAttached;
+    broadcast({ type: "sessionAttached", id, attached: nowAttached === 1 });
+  }
+
   const now = Date.now();
 
   if (w.aiState === "waiting" && w.resetAtEpochMs && now >= w.resetAtEpochMs) {
@@ -699,6 +706,7 @@ const server = http.createServer(async (req, res) => {
       logs: w.logs,
       aiState: w.aiState || null,
       exitReason: w.exitReason || null,
+      sessionAttached: w.sessionAttached || 0,
       ...getMonitorMeta(w),
     }));
     return json(res, 200, list);
