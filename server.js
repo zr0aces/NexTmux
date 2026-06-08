@@ -786,7 +786,7 @@ const server = http.createServer(async (req, res) => {
     const w = workers.get(id);
     if (w) {
       if (w.pollTimer) clearInterval(w.pollTimer);
-      sessionStateManager.removeSession(w.sessionName);
+      sessionStateManager.removeSession(w);
       workers.delete(id);
       lastCapture.delete(id);
     }
@@ -845,7 +845,7 @@ const server = http.createServer(async (req, res) => {
       if (w.pollTimer) clearInterval(w.pollTimer);
       
       // 1. Remove session from sessionStateManager snapshot on disk
-      sessionStateManager.removeSession(w.sessionName);
+      sessionStateManager.removeSession(w);
       
       // 2. Reset worker in-memory tracking & AI monitoring properties
       w.status = "running";
