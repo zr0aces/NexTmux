@@ -11,7 +11,7 @@ const { createSessionStateManager } = require("./lib/sessionStateManager");
 const { createWatcherEngine, getNewLinesCount, cleanRateLimitLine } = require("./lib/watcherEngine");
 const { createMessageProcessor, RATE_LIMIT_PATTERN_NAMES } = require("./lib/messageProcessor");
 
-const { sanitizeSessionName, tmuxExec, tmuxExecAsync, isAlive } = require("./lib/tmuxService");
+const { sanitizeSessionName, tmuxExec, tmuxExecAsync, isAlive, resolveSessionId } = require("./lib/tmuxService");
 const {
   SESSION_TTL_MS,
   timingSafePasswordMatch,
@@ -237,6 +237,7 @@ function spawnWorker(cwd, cmd) {
   tmuxExec("new-session", "-d", "-s", sessionName, "-c", cwd, "-e", "CLAUDECODE=");
   tmuxExec("send-keys", "-t", sessionName, cmd, "Enter");
   const logs = [];
+  const tmuxSessionId = resolveSessionId(sessionName);
   workers.set(id, {
     sessionName,
     cwd,
@@ -249,6 +250,8 @@ function spawnWorker(cwd, cmd) {
     exitReason: null,
     lastPaneCommand: null,
     lastAction: null,
+    tmuxSessionId,
+    sessionAttached: 0,
   });
   initializeWorkerMonitorState(workers.get(id));
   startPolling(id);
@@ -734,6 +737,7 @@ const server = http.createServer(async (req, res) => {
     const existingEntry = [...workers.entries()].find(([, w]) => w.sessionName === sessionName);
     if (existingEntry) return json(res, 200, { id: existingEntry[0] });
     const id = String(nextId++);
+    const tmuxSessionId = resolveSessionId(sessionName);
     workers.set(id, {
       sessionName,
       cwd,
@@ -744,6 +748,8 @@ const server = http.createServer(async (req, res) => {
       seenExpectedCmd: false,
       lastPaneCommand: null,
       lastAction: null,
+      tmuxSessionId,
+      sessionAttached: 0,
     });
     initializeWorkerMonitorState(workers.get(id));
     startPolling(id);
@@ -1051,7 +1057,7 @@ server.on('close', () => {
 
 
 function recoverSessions() {
-  const raw = tmuxExec("ls", "-F", "#{session_name}|#{pane_current_path}|#{pane_current_command}");
+  const raw = tmuxExec("ls", "-F", "#{session_name}|#{pane_current_path}|#{pane_current_command}|#{session_id}");
   if (!raw.trim()) return;
   const recovered = [];
   for (const line of raw.trim().split("\n")) {
@@ -1060,6 +1066,7 @@ function recoverSessions() {
     const sessionName = parts[0];
     const cwd = parts[1] || "unknown";
     const cmd = parts[2] || "unknown";
+    const tmuxSessionId = parts[3] ? parts[3].trim() : null;
     if (!sessionName.startsWith("term-")) continue;
     const id = sessionName.replace("term-", "");
     const numId = parseInt(id);
@@ -1077,6 +1084,8 @@ function recoverSessions() {
       exitReason: null,
       lastPaneCommand: null,
       lastAction: null,
+      tmuxSessionId,
+      sessionAttached: 0,
     });
     initializeWorkerMonitorState(workers.get(id));
     startPolling(id);
@@ -1089,7 +1098,7 @@ function recoverSessions() {
     // reconnect after crash-restart) see recovered sessions without a page reload.
     recovered.forEach(id => {
       const w = workers.get(id);
-      if (w) broadcast({ type: "spawned", id, cwd: w.cwd, cmd: w.cmd, status: "running", sessionName: w.sessionName, ...getMonitorMeta(w) });
+      if (w) broadcast({ type: "spawned", id, fromRecovery: true, cwd: w.cwd, cmd: w.cmd, status: "running", sessionName: w.sessionName, ...getMonitorMeta(w) });
     });
   }
 }
