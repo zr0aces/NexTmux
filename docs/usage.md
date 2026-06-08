@@ -29,6 +29,8 @@ This will spawn an isolated tmux session named `term-{id}` (e.g., `term-1`) runn
 - **Mechanical Toolkit (Keyboard Icon)**: Click the **⌨** keyboard button to reveal standard key shortcuts (`esc`, `↑`, `↓`, `↵`, `tab`, `⇧tab`, `⌃c`) plus quick command buttons (`proceed`, `continue`, `yes`) for fast manual interaction.
 - **Git Diff Inspector**: Click the **Diff** action pill on any session card to review real-time git state and inspect local changes in that worker's active directory.
 - **Tab & Split Views**: Toggle between **Tab** view (for clean, focused, single-pane work) and **Split** view (to monitor multiple concurrent terminal tasks side-by-side).
+- **Persistent Tab Selection**: The active session tab is saved to `localStorage`. After a page refresh or server restart, the dashboard restores the previously selected session automatically — recovery does not hijack your current view.
+- **tmux Attached Indicator**: A green ring appears on the tab dot and AI state badge whenever a native tmux client is actively attached to that session (e.g. after running `tmux attach -t term-1`). The indicator updates within 3 seconds of attach or detach.
 
 ---
 
