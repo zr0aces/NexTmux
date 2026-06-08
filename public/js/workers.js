@@ -187,7 +187,7 @@ function ensureCard(id, cwd, status, logs, cmd, reason, monitorMeta) {
   }
   updateSplitGrid();
 
-  selectTab(id);
+  if (activeTab === null) selectTab(id);
 
   if (status === 'stopped' || status === 'completed') {
     const btn = document.getElementById('kill-' + id);
@@ -418,6 +418,13 @@ function updateStatus(id, status, reason) {
     const resetBtn = document.getElementById('reset-' + id);
     if (resetBtn) resetBtn.style.display = '';
   }
+}
+
+function updateSessionAttached(id, attached) {
+  const dot = document.getElementById('tab-dot-' + id);
+  if (dot) dot.classList.toggle('tmux-attached', Boolean(attached));
+  const badge = document.getElementById('badge-' + id);
+  if (badge) badge.classList.toggle('tmux-attached', Boolean(attached));
 }
 
 function updateAIState(id, state) {

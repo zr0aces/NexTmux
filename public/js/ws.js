@@ -21,7 +21,10 @@ function initWS() {
 }
 
 function handleMsg(d) {
-  if (d.type === 'spawned') ensureCard(d.id, d.cwd, d.status, [], d.cmd, d.reason || null, d);
+  if (d.type === 'spawned') {
+    ensureCard(d.id, d.cwd, d.status, [], d.cmd, d.reason || null, d);
+    if (!d.fromRecovery) selectTab(d.id);
+  }
   if (d.type === 'log') appendLog(d.id, d.src, d.text);
   if (d.type === 'status') updateStatus(d.id, d.status, d.reason || null);
   if (d.type === 'cwd') updateCwd(d.id, d.cwd);
@@ -134,9 +137,14 @@ function loadAll() {
         ensureCard(w.id, w.cwd, w.status, w.logs, w.cmd, w.exitReason || null, w);
         if (w.aiState) updateAIState(w.id, w.aiState);
         updateMonitorMeta(w.id, w);
+        updateSessionAttached(w.id, w.sessionAttached === 1);
       });
       if (typeof restoreTabOrder === 'function') {
         restoreTabOrder();
+      }
+      const savedTab = localStorage.getItem('tmuxhub.activeTab.v1');
+      if (savedTab && document.querySelector('.tab[data-id="' + savedTab + '"]')) {
+        selectTab(savedTab);
       }
     });
 }
