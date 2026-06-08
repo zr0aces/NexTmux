@@ -22,7 +22,7 @@
   --accent-orange-hover: #f97316;
   
   --font-ui: "Outfit", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-  --font-mono: "JetBrains Mono", "SF Mono", monospace;
+  --font-mono: "Menlo", "Monaco", "Courier New", monospace;
   
   --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.4);
   --shadow-lg: 0 10px 30px rgba(0, 0, 0, 0.6);
@@ -887,7 +887,8 @@ header h1 {
   flex: 1;
   min-height: 100px;
   resize: vertical;
-  line-height: 1.6;
+  line-height: 1.3;
+  letter-spacing: 0;
 }
 
 .logs::-webkit-scrollbar {
