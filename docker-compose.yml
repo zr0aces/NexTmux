@@ -1,5 +1,5 @@
 services:
-  tmuxhub:
+  nextmux:
     image: node:22-bookworm
     working_dir: /app
     env_file:
