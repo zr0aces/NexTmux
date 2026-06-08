@@ -1,6 +1,6 @@
 # User Guide & Dashboard Usage
 
-This guide walks you through logging in, starting session workers, utilizing tmux mirroring, and navigating the TmuxHub dashboard interface.
+This guide walks you through logging in, starting session workers, utilizing tmux mirroring, and navigating the NexTmux dashboard interface.
 
 ---
 
@@ -21,7 +21,7 @@ This guide walks you through logging in, starting session workers, utilizing tmu
 3. Specify your **Command** (defaults to `claude`; supports `bash`, `python`, or any custom CLI tool).
 4. Click **+ New**.
 
-This will spawn an isolated tmux session named `term-{id}` (e.g., `term-1`) running under a dedicated TmuxHub worker process.
+This will spawn an isolated tmux session named `term-{id}` (e.g., `term-1`) running under a dedicated NexTmux worker process.
 
 ### Step 3: Manage Active Workflows
 - **Terminal Logs & Scroll Lock**: Watch live output streaming directly from the active tmux pane inside the high-density log viewer. If you scroll up to inspect previous output, the log view automatically locks its scroll position so new log lines do not jar or force-scroll your view. Scrolling back to the bottom automatically unlocks and resumes auto-scroll.
@@ -36,11 +36,11 @@ This will spawn an isolated tmux session named `term-{id}` (e.g., `term-1`) runn
 
 ## 🔄 Two-Way Terminal Mirroring
 
-Because TmuxHub is backed directly by native `tmux` sessions, you can attach, view, and interact with active session workers from both the Web UI and your local machine simultaneously.
+Because NexTmux is backed directly by native `tmux` sessions, you can attach, view, and interact with active session workers from both the Web UI and your local machine simultaneously.
 
 ### Finding Running Sessions
 
-You can list all active terminal sessions created by TmuxHub using the CLI:
+You can list all active terminal sessions created by NexTmux using the CLI:
 
 ```bash
 tmux ls
@@ -48,7 +48,7 @@ tmux ls
 
 ### Attaching via Local Terminal
 
-To attach your local terminal client directly to an active TmuxHub card (e.g., `term-1`):
+To attach your local terminal client directly to an active NexTmux card (e.g., `term-1`):
 
 ```bash
 tmux attach -t term-1
@@ -62,7 +62,7 @@ tmux attach -t term-1
 
 ## 🔍 Attaching Already-Running Sessions
 
-Have some terminal workflows that were started outside of TmuxHub? You can sync them with the dashboard in two simple steps:
+Have some terminal workflows that were started outside of NexTmux? You can sync them with the dashboard in two simple steps:
 
 1. Click the **🔍 Scan** button in the header bar.
 2. Confirm the auto-discovered running tmux sessions.

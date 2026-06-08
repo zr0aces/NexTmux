@@ -83,7 +83,7 @@ function updateSplitGrid() {
 
 function selectTab(id) {
   activeTab = id;
-  localStorage.setItem('tmuxhub.activeTab.v1', id);
+  localStorage.setItem('nextmux.activeTab.v1', id);
   document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.id === id));
   document.querySelectorAll('.tab-panel').forEach(p => p.classList.toggle('active', p.dataset.id === id));
   setTimeout(sendResize, 0);
@@ -163,11 +163,11 @@ if (tabBar) {
 
 function saveTabOrder() {
   const order = Array.from(document.querySelectorAll('.tab')).map(t => t.dataset.sessionName || t.dataset.id);
-  localStorage.setItem('tmuxhub.tabOrder.v1', JSON.stringify(order));
+  localStorage.setItem('nextmux.tabOrder.v1', JSON.stringify(order));
 }
 
 function restoreTabOrder() {
-  const raw = localStorage.getItem('tmuxhub.tabOrder.v1');
+  const raw = localStorage.getItem('nextmux.tabOrder.v1');
   if (!raw) return;
   try {
     const order = JSON.parse(raw);

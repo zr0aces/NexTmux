@@ -1,4 +1,4 @@
-# TmuxHub
+# NexTmux
 
 A web dashboard for managing multiple terminal sessions via tmux. Run any command — Claude CLI, bash, python, or anything else — and monitor them all from one place.
 
@@ -24,20 +24,20 @@ If you find it useful, feel free to give it a star on GitHub!
 
 ## 🖥️ Tmux Usage
 
-TmuxHub uses **tmux** under the hood to create and manage isolated terminal sessions.
+NexTmux uses **tmux** under the hood to create and manage isolated terminal sessions.
 
 ### Attach to a running session
 
 Every worker spawned from the dashboard corresponds to a named tmux session (`term-<id>`). You can attach to it directly from your terminal:
 
 ```bash
-# List all TmuxHub sessions
+# List all NexTmux sessions
 tmux ls | grep term-
 
 # Attach to a specific worker (e.g. worker id 1)
 tmux attach -t term-1
 
-# Detach and return to TmuxHub without stopping the session
+# Detach and return to NexTmux without stopping the session
 # (inside tmux) press: Ctrl+B  then  D
 ```
 
@@ -52,7 +52,7 @@ tmux attach -t term-1
 ### Manual session management
 
 ```bash
-# Create a new session manually (TmuxHub will pick it up on reload)
+# Create a new session manually (NexTmux will pick it up on reload)
 tmux new-session -d -s term-5 -c ~/projects "claude"
 
 # Send a keystroke to a session without attaching
@@ -62,7 +62,7 @@ tmux send-keys -t term-1 "ls -la" Enter
 tmux kill-session -t term-1
 ```
 
-> **Tip:** Sessions created manually with the `term-<id>` naming convention are automatically recovered by TmuxHub on server restart.
+> **Tip:** Sessions created manually with the `term-<id>` naming convention are automatically recovered by NexTmux on server restart.
 
 ---
 
@@ -92,8 +92,8 @@ tmux kill-session -t term-1
 
 ### 1. Clone & Install
 ```bash
-git clone https://github.com/zr0aces/TmuxHub.git
-cd TmuxHub
+git clone https://github.com/zr0aces/NexTmux.git
+cd NexTmux
 npm install
 ```
 
@@ -127,7 +127,7 @@ Detailed deployment guides and configurations have been moved to the [docs/](doc
 * **[Installation & Deployment Guide](docs/installation.md)** — Step-by-step setup guides for macOS daemon (`launchd`), Ubuntu/Debian services, Docker Compose setups, and Cloudflare Secure Tunnels.
 * **[User Guide & Dashboard Usage](docs/usage.md)** — Learn how to log in, scan/attach existing sessions, leverage bidirectional mirroring, and interact with the virtual mechanical keyboard.
 * **[AI State Monitoring & Alerts Setup](docs/ai_monitoring.md)** — Setup guide for configuring Telegram outbound alerts, tuning idle thresholds, and modifying regex patterns.
-* **[Technical Specification](docs/technical_spec.md)** — In-depth architectural details, client-server data flows, security mechanisms, and core capability implementations of TmuxHub.
+* **[Technical Specification](docs/technical_spec.md)** — In-depth architectural details, client-server data flows, security mechanisms, and core capability implementations of NexTmux.
 * **[Technical Requirements](docs/technical_requirements.md)** — Prerequisites, system requirements, network ports, permissions, and browser compatibility checklists.
 * **[User & Functional Requirements](docs/user_requirements.md)** — Core user workflows when starting projects and a comprehensive workspace feature catalog.
 
@@ -136,7 +136,7 @@ Detailed deployment guides and configurations have been moved to the [docs/](doc
 ## 📂 File Structure
 
 ```text
-tmuxhub/
+nextmux/
 ├── docs/                  # Detailed documentation guides
 │   ├── installation.md    # Environments, systemd/launchd, tunnels
 │   ├── usage.md           # Dashboard user guide & tmux commands

@@ -1,12 +1,12 @@
 # Installation & Deployment
 
-This document provides in-depth, environment-specific setup instructions and advanced deployment options for TmuxHub.
+This document provides in-depth, environment-specific setup instructions and advanced deployment options for NexTmux.
 
 ---
 
 ## Prerequisites
 
-Before setting up TmuxHub, ensure your system has:
+Before setting up NexTmux, ensure your system has:
 - [Node.js](https://nodejs.org) 22+
 - [tmux](https://github.com/tmux/tmux)
 - Optional for remote access: [cloudflared](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/)
@@ -18,8 +18,8 @@ Before setting up TmuxHub, ensure your system has:
 ### 1) Clone and Install Dependencies
 
 ```bash
-git clone https://github.com/zr0aces/TmuxHub.git
-cd TmuxHub
+git clone https://github.com/zr0aces/NexTmux.git
+cd NexTmux
 npm install
 ```
 
@@ -60,7 +60,7 @@ TRUST_PROXY=0
 }
 ```
 
-### 3) Start TmuxHub
+### 3) Start NexTmux
 
 ```bash
 npm start
@@ -73,7 +73,7 @@ Your dashboard will be available at: **`http://localhost:8081`**
 ## 🍎 macOS Installation
 
 ### Option A: Manual Setup
-If you want to manually run TmuxHub:
+If you want to manually run NexTmux:
 
 ```bash
 brew install node tmux
@@ -84,25 +84,25 @@ npm start
 ```
 
 ### Option B: Guided Setup + launchd Daemon (Recommended)
-TmuxHub provides an automated script to register itself as a background daemon on macOS:
+NexTmux provides an automated script to register itself as a background daemon on macOS:
 
 ```bash
 npm run setup
 ```
 
-The script checks for system dependencies, prompts to generate `.env` and `config.json` templates, and registers `com.tmuxhub.server` in `launchd`.
+The script checks for system dependencies, prompts to generate `.env` and `config.json` templates, and registers `com.nextmux.server` in `launchd`.
 
 #### Service Management Commands
 
 ```bash
 # Stop the background service
-launchctl unload ~/Library/LaunchAgents/com.tmuxhub.server.plist
+launchctl unload ~/Library/LaunchAgents/com.nextmux.server.plist
 
 # Start the background service
-launchctl load ~/Library/LaunchAgents/com.tmuxhub.server.plist
+launchctl load ~/Library/LaunchAgents/com.nextmux.server.plist
 
 # Inspect service logs
-cat /tmp/tmuxhub.log
+cat /tmp/nextmux.log
 ```
 
 ---
@@ -119,8 +119,8 @@ sudo apt-get install -y nodejs npm tmux
 ### 2) Prepare the Project
 
 ```bash
-git clone https://github.com/zr0aces/TmuxHub.git
-cd TmuxHub
+git clone https://github.com/zr0aces/NexTmux.git
+cd NexTmux
 npm install
 cp .env.example .env
 cp config.example.json config.json
@@ -134,7 +134,7 @@ npm start
 
 ### 4) Create a `systemd` Service with `systemctl` (Recommended)
 
-You can run TmuxHub as either:
+You can run NexTmux as either:
 - a **system service** (`/etc/systemd/system`) for machine-wide startup, or
 - a **user service** (`~/.config/systemd/user`) for per-user startup.
 
@@ -144,19 +144,19 @@ Use absolute paths in `WorkingDirectory` and `ExecStart`.
 
 1. Create the service file:
    ```bash
-   sudo nano /etc/systemd/system/tmuxhub.service
+   sudo nano /etc/systemd/system/nextmux.service
    ```
 2. Paste and adjust this example:
    ```ini
    [Unit]
-   Description=TmuxHub Dashboard Server
+   Description=NexTmux Dashboard Server
    After=network.target
 
    [Service]
    Type=simple
    User=YOUR_LINUX_USER
    Group=YOUR_LINUX_USER
-   WorkingDirectory=/absolute/path/to/TmuxHub
+   WorkingDirectory=/absolute/path/to/NexTmux
    ExecStart=/usr/bin/npm start
    Restart=on-failure
    RestartSec=3
@@ -168,8 +168,8 @@ Use absolute paths in `WorkingDirectory` and `ExecStart`.
 3. Reload `systemd` and enable the service:
    ```bash
    sudo systemctl daemon-reload
-   sudo systemctl enable tmuxhub
-   sudo systemctl start tmuxhub
+   sudo systemctl enable nextmux
+   sudo systemctl start nextmux
    ```
 
 #### Option B — User Service (current user only)
@@ -177,17 +177,17 @@ Use absolute paths in `WorkingDirectory` and `ExecStart`.
 1. Create the service directory and file:
    ```bash
    mkdir -p ~/.config/systemd/user
-   nano ~/.config/systemd/user/tmuxhub.service
+   nano ~/.config/systemd/user/nextmux.service
    ```
 2. Paste and adjust this example:
    ```ini
    [Unit]
-   Description=TmuxHub Dashboard Server (User Service)
+   Description=NexTmux Dashboard Server (User Service)
    After=default.target
 
    [Service]
    Type=simple
-   WorkingDirectory=/absolute/path/to/TmuxHub
+   WorkingDirectory=/absolute/path/to/NexTmux
    ExecStart=/usr/bin/npm start
    Restart=on-failure
    RestartSec=3
@@ -199,8 +199,8 @@ Use absolute paths in `WorkingDirectory` and `ExecStart`.
 3. Reload and enable the user service:
    ```bash
    systemctl --user daemon-reload
-   systemctl --user enable tmuxhub
-   systemctl --user start tmuxhub
+   systemctl --user enable nextmux
+   systemctl --user start nextmux
    ```
 
 > [!TIP]
@@ -214,28 +214,28 @@ Use these commands for routine operations.
 #### System service commands
 
 ```bash
-sudo systemctl status tmuxhub
-sudo systemctl restart tmuxhub
-sudo systemctl stop tmuxhub
-sudo systemctl disable tmuxhub
-sudo journalctl -u tmuxhub -f
+sudo systemctl status nextmux
+sudo systemctl restart nextmux
+sudo systemctl stop nextmux
+sudo systemctl disable nextmux
+sudo journalctl -u nextmux -f
 ```
 
 #### User service commands
 
 ```bash
-systemctl --user status tmuxhub
-systemctl --user restart tmuxhub
-systemctl --user stop tmuxhub
-systemctl --user disable tmuxhub
-journalctl --user -u tmuxhub -f
+systemctl --user status nextmux
+systemctl --user restart nextmux
+systemctl --user stop nextmux
+systemctl --user disable nextmux
+journalctl --user -u nextmux -f
 ```
 
 ---
 
 ## 🐳 Docker Compose Deployment (Optional)
 
-If you prefer to run TmuxHub in a containerized environment, use the provided Docker Compose configuration:
+If you prefer to run NexTmux in a containerized environment, use the provided Docker Compose configuration:
 
 ```bash
 cp .env.example .env
@@ -251,7 +251,7 @@ By default, Compose publishes the service port on **`8081:8081`** (defined in `d
 
 ### Cloudflare Tunnel Integration
 
-TmuxHub includes out-of-the-box integration with Cloudflare Tunnels (`cloudflared`). If `cloudflared` is available in your system's `PATH`, TmuxHub will automatically spin up a public secure tunnel upon startup.
+NexTmux includes out-of-the-box integration with Cloudflare Tunnels (`cloudflared`). If `cloudflared` is available in your system's `PATH`, NexTmux will automatically spin up a public secure tunnel upon startup.
 
 - **Disable via `.env`**: Set `ENABLE_TUNNEL=0`
 - **Disable via `config.json`**:

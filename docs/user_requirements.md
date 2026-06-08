@@ -1,6 +1,6 @@
-# TmuxHub User Requirements & Functional Catalog
+# NexTmux User Requirements & Functional Catalog
 
-This document defines the user requirements, functional workflows when starting or attaching a project, and the complete feature catalog required for the TmuxHub dashboard.
+This document defines the user requirements, functional workflows when starting or attaching a project, and the complete feature catalog required for the NexTmux dashboard.
 
 ---
 
@@ -32,7 +32,7 @@ graph TD
 
 ## 2. Workspace Function Catalog
 
-To support developer workflows, the TmuxHub interface must implement the following functional features, grouped by area:
+To support developer workflows, the NexTmux interface must implement the following functional features, grouped by area:
 
 ### 2.1 Access & Security Controls
 * **Password Login**: Validates password submissions against host-defined environment keys.

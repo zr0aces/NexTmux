@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-echo "🚀 TmuxHub Setup"
+echo "🚀 NexTmux Setup"
 echo "================"
 echo
 
@@ -83,9 +83,9 @@ fi
 
 # 6. Setup launchd (background service)
 echo
-PLIST_NAME="com.tmuxhub.server"
+PLIST_NAME="com.nextmux.server"
 PLIST_PATH="$HOME/Library/LaunchAgents/${PLIST_NAME}.plist"
-TMUXHUB_DIR="$(cd "$(dirname "$0")" && pwd)"
+NEXTMUX_DIR="$(cd "$(dirname "$0")" && pwd)"
 NODE_PATH="$(which node)"
 
 # Unload if already loaded
@@ -101,30 +101,30 @@ cat > "$PLIST_PATH" << EOF
     <key>ProgramArguments</key>
     <array>
         <string>${NODE_PATH}</string>
-        <string>${TMUXHUB_DIR}/server.js</string>
+        <string>${NEXTMUX_DIR}/server.js</string>
     </array>
     <key>WorkingDirectory</key>
-    <string>${TMUXHUB_DIR}</string>
+    <string>${NEXTMUX_DIR}</string>
     <key>RunAtLoad</key>
     <true/>
     <key>KeepAlive</key>
     <true/>
     <key>StandardOutPath</key>
-    <string>/tmp/tmuxhub.log</string>
+    <string>/tmp/nextmux.log</string>
     <key>StandardErrorPath</key>
-    <string>/tmp/tmuxhub.err</string>
+    <string>/tmp/nextmux.err</string>
 </dict>
 </plist>
 EOF
 
 launchctl load "$PLIST_PATH"
-echo "✅ TmuxHub service registered & started"
+echo "✅ NexTmux service registered & started"
 
 echo
-echo "🎉 Setup complete! TmuxHub is running in the background."
+echo "🎉 Setup complete! NexTmux is running in the background."
 echo
 echo "   Management commands:"
 echo "   launchctl unload $PLIST_PATH   # Stop"
 echo "   launchctl load $PLIST_PATH     # Start"
-echo "   cat /tmp/tmuxhub.log           # Logs"
+echo "   cat /tmp/nextmux.log           # Logs"
 echo

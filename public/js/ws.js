@@ -143,7 +143,7 @@ function loadAll() {
       if (typeof restoreTabOrder === 'function') {
         restoreTabOrder();
       }
-      const savedTab = localStorage.getItem('tmuxhub.activeTab.v1');
+      const savedTab = localStorage.getItem('nextmux.activeTab.v1');
       if (savedTab && document.querySelector('.tab[data-id="' + savedTab + '"]')) {
         selectTab(savedTab);
       }

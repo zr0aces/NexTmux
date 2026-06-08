@@ -6,7 +6,7 @@
   "engines": {
     "node": ">=22"
   },
-  "name": "tmuxhub",
+  "name": "nextmux",
   "version": "2026.6.2",
   "main": "index.js",
   "scripts": {

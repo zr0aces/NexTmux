@@ -131,7 +131,7 @@ after(() => {
   } catch (e) {}
 });
 
-test("Integration tests for TmuxHub API", async (t) => {
+test("Integration tests for NexTmux API", async (t) => {
   // 1. Perform login
   const loginRes = await request("POST", "/api/login", { pw: PASSWORD });
   assert.equal(loginRes.status, 200);

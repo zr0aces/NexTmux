@@ -1,12 +1,12 @@
-# TmuxHub Technical Requirements
+# NexTmux Technical Requirements
 
-This document outlines the software, hardware, network, and security requirements necessary to successfully run and access the TmuxHub workspace manager.
+This document outlines the software, hardware, network, and security requirements necessary to successfully run and access the NexTmux workspace manager.
 
 ---
 
 ## 1. Runtime & Binary Dependencies
 
-To run the TmuxHub server, the host system must meet the following software requirements:
+To run the NexTmux server, the host system must meet the following software requirements:
 
 * **Node.js**: Version `22.0.0` or higher (utilizes Node's native test runner and modern HTTP/crypto APIs).
 * **tmux**: Version `3.0` or higher. The binary must be available in the system's `PATH`.
@@ -16,7 +16,7 @@ To run the TmuxHub server, the host system must meet the following software requ
 
 ## 2. Operating System Compatibility
 
-TmuxHub operates on POSIX-compatible host operating systems where native `tmux` is supported:
+NexTmux operates on POSIX-compatible host operating systems where native `tmux` is supported:
 
 * **Linux**: Fully supported (tested on Ubuntu 20.04+, Debian, Alpine).
 * **macOS**: Fully supported (macOS 12+ recommended; supports macOS `launchd` service registration).
@@ -50,6 +50,6 @@ Users accessing the web dashboard require a modern, standards-compliant web brow
 
 * **Subprocess Execution**: The Node.js process runs as the system user and must have permission to execute child processes (`child_process.execSync`, `spawn`, `execFileSync`) to invoke `tmux` and `git`.
 * **File System Access**:
-  * **Read & Write Access** is required for the TmuxHub root folder and the `state/` directory to maintain `session-state.json`.
+  * **Read & Write Access** is required for the NexTmux root folder and the `state/` directory to maintain `session-state.json`.
   * **Read & Write Access** to any working directory specified when spawning new worker sessions (to run CLI tasks, view git diffs, etc.).
 * **Process Lifespan**: Permission to run in the background (via `systemd` or `launchd`) if configured to run as a system daemon.

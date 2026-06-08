@@ -1,6 +1,6 @@
 # AI State Monitoring & Telegram Alerts
 
-TmuxHub features a real-time supervision engine designed to detect when interactive AI CLIs (such as Claude Code, Codex, aider, or custom shell wrappers) are waiting for user authorization or input.
+NexTmux features a real-time supervision engine designed to detect when interactive AI CLIs (such as Claude Code, Codex, aider, or custom shell wrappers) are waiting for user authorization or input.
 
 ---
 
@@ -60,13 +60,13 @@ The server parses relative durations and absolute timestamps into a concrete UTC
 ### 4) Automatic Resumption
 Once the epoch is reached:
 - The worker's state transitions from `waiting` back to `running`.
-- If the worker is in **Auto Mode**, TmuxHub automatically inputs `"continue"` into the tmux session, prompting the AI agent (e.g., Claude Code) to resume execution.
+- If the worker is in **Auto Mode**, NexTmux automatically inputs `"continue"` into the tmux session, prompting the AI agent (e.g., Claude Code) to resume execution.
 
 ---
 
 ## ✈️ Outbound Telegram Alerts
 
-To keep you updated on long-running tasks while you are away from your desk, TmuxHub dispatches Telegram notifications when workers enter the **Waiting** state.
+To keep you updated on long-running tasks while you are away from your desk, NexTmux dispatches Telegram notifications when workers enter the **Waiting** state.
 
 Duplicate wait-state messages are deduplicated and only sent once per unique message content.
 

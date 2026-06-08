@@ -1,7 +1,7 @@
 // ── Init & Event Binding ──
 
-const REMEMBER_PW_KEY = 'tmuxhub.rememberedPw.v1';
-const REMEMBER_PW_DB = 'tmuxhub-secure-login';
+const REMEMBER_PW_KEY = 'nextmux.rememberedPw.v1';
+const REMEMBER_PW_DB = 'nextmux-secure-login';
 const REMEMBER_PW_STORE = 'keys';
 const REMEMBER_PW_KEY_ID = 'remember-password-key';
 

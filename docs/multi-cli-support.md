@@ -1,11 +1,11 @@
-# TmuxHub Multi-CLI Support
+# NexTmux Multi-CLI Support
 
 **Version:** 2026.5.25  
 **Status:** Phase 1 Implementation Complete
 
 ## Overview
 
-TmuxHub now supports **three AI CLI tools** with intelligent pattern detection and auto-responses tailored to each tool:
+NexTmux now supports **three AI CLI tools** with intelligent pattern detection and auto-responses tailored to each tool:
 
 1. **Claude** - Anthropic's Claude CLI
 2. **Codex** - OpenAI's Codex API client
@@ -157,7 +157,7 @@ Approval: "proceed with deployment?"
 
 ### 1. CLI Detection
 When you spawn a session with a command like `claude` or `codex`:
-- TmuxHub detects the CLI type
+- NexTmux detects the CLI type
 - Loads the corresponding CLI profile
 - Applies CLI-specific patterns to the pattern engine
 
@@ -230,7 +230,7 @@ Edit `config.json` to add custom patterns for a CLI:
 
 ### CLI Not Detected
 
-Check what TmuxHub detected:
+Check what NexTmux detected:
 ```
 Server logs will show: "Worker 5 (term-5): CLI type = claude"
 ```

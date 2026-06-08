@@ -1,12 +1,12 @@
-# TmuxHub Technical Specification
+# NexTmux Technical Specification
 
-This document provides a detailed technical specification of the **TmuxHub** workspace manager. It outlines the architecture, data flow, security model, core components, and deployment mechanics of the system.
+This document provides a detailed technical specification of the **NexTmux** workspace manager. It outlines the architecture, data flow, security model, core components, and deployment mechanics of the system.
 
 ---
 
 ## 1. System Overview
 
-TmuxHub is a lightweight, real-time developer terminal dashboard and workspace manager. It is designed to host, monitor, and interact with multiple long-running CLI tools (such as `claude` CLI, bash shells, or build scripts) within isolated, native `tmux` sessions. 
+NexTmux is a lightweight, real-time developer terminal dashboard and workspace manager. It is designed to host, monitor, and interact with multiple long-running CLI tools (such as `claude` CLI, bash shells, or build scripts) within isolated, native `tmux` sessions. 
 
 ### Key Features
 * **Native Tmux Execution**: Seamless bidirectional mirroring between the web console and host terminals.
@@ -20,7 +20,7 @@ TmuxHub is a lightweight, real-time developer terminal dashboard and workspace m
 
 ## 2. System Architecture
 
-TmuxHub is designed as a zero-framework, low-dependency client-server application. 
+NexTmux is designed as a zero-framework, low-dependency client-server application. 
 
 ```mermaid
 graph TD
@@ -157,7 +157,7 @@ Real-time messages are transmitted as JSON packets over a single WebSocket conne
 ## 4. Core Capabilities & Mechanics
 
 ### 4.1 Native Tmux Integration
-TmuxHub interacts directly with the system's `tmux` binary. When spawning a worker, it invokes:
+NexTmux interacts directly with the system's `tmux` binary. When spawning a worker, it invokes:
 ```bash
 tmux new-session -d -s term-{id} -c {cwd} -e "CLAUDECODE="
 tmux send-keys -t term-{id} "{cmd}" Enter
@@ -240,7 +240,7 @@ The side-panel displays changes within the active workspace directory:
 
 ## 5. Security Model & Safeguards
 
-TmuxHub implements several security measures to protect the host system:
+NexTmux implements several security measures to protect the host system:
 
 * **Authentication**: Password matches are verified on the server using `crypto.timingSafeEqual` to block timing attacks. Successful log-ins return a cookie with `HttpOnly; SameSite=Strict; Path=/` flags.
 * **IP Rate Limiting**: Login submissions are tracked in-memory. If a single IP address commits more than 20 incorrect password submissions within a 10-minute window, subsequent login requests are blocked.
@@ -252,48 +252,48 @@ TmuxHub implements several security measures to protect the host system:
 
 ## 6. Installation & Deployment Configurations
 
-TmuxHub supports three principal deployment models.
+NexTmux supports three principal deployment models.
 
 ### 6.1 macOS Launchd Daemon
-Spins up the server as a background user daemon (`~/Library/LaunchAgents/com.tmuxhub.server.plist`):
+Spins up the server as a background user daemon (`~/Library/LaunchAgents/com.nextmux.server.plist`):
 ```xml
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
     <key>Label</key>
-    <string>com.tmuxhub.server</string>
+    <string>com.nextmux.server</string>
     <key>ProgramArguments</key>
     <array>
         <string>/usr/local/bin/node</string>
-        <string>/absolute/path/to/TmuxHub/server.js</string>
+        <string>/absolute/path/to/NexTmux/server.js</string>
     </array>
     <key>RunAtLoad</key>
     <true/>
     <key>KeepAlive</key>
     <true/>
     <key>StandardOutPath</key>
-    <string>/tmp/tmuxhub.log</string>
+    <string>/tmp/nextmux.log</string>
     <key>StandardErrorPath</key>
-    <string>/tmp/tmuxhub.log</string>
+    <string>/tmp/nextmux.log</string>
 </dict>
 </plist>
 ```
 
 ### 6.2 Linux Systemd Services
 
-#### Option A: System Service (`/etc/systemd/system/tmuxhub.service`)
+#### Option A: System Service (`/etc/systemd/system/nextmux.service`)
 Used for machine-wide, multi-user deployments:
 ```ini
 [Unit]
-Description=TmuxHub Dashboard Server
+Description=NexTmux Dashboard Server
 After=network.target
 
 [Service]
 Type=simple
-User=tmuxhub-user
-Group=tmuxhub-user
-WorkingDirectory=/opt/TmuxHub
+User=nextmux-user
+Group=nextmux-user
+WorkingDirectory=/opt/NexTmux
 ExecStart=/usr/bin/npm start
 Restart=on-failure
 RestartSec=3
@@ -303,16 +303,16 @@ Environment=NODE_ENV=production
 WantedBy=multi-user.target
 ```
 
-#### Option B: User Service (`~/.config/systemd/user/tmuxhub.service`)
+#### Option B: User Service (`~/.config/systemd/user/nextmux.service`)
 Allows non-root users to execute and control the service:
 ```ini
 [Unit]
-Description=TmuxHub Dashboard Server (User Service)
+Description=NexTmux Dashboard Server (User Service)
 After=default.target
 
 [Service]
 Type=simple
-WorkingDirectory=/home/user/TmuxHub
+WorkingDirectory=/home/user/NexTmux
 ExecStart=/usr/bin/npm start
 Restart=on-failure
 RestartSec=3
@@ -326,9 +326,9 @@ WantedBy=default.target
 Containerized deployment utilizing standard bind-mount volumes:
 ```yaml
 services:
-  tmuxhub:
+  nextmux:
     build: .
-    container_name: tmuxhub
+    container_name: nextmux
     restart: unless-stopped
     ports:
       - "8081:8081"

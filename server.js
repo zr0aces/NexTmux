@@ -1148,7 +1148,7 @@ function startTunnel() {
         fetch(DISCORD_WEBHOOK, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ content: `☁️ TmuxHub → ${tunnelUrl}` }),
+          body: JSON.stringify({ content: `☁️ NexTmux → ${tunnelUrl}` }),
         }).catch(() => {});
       }
     }
@@ -1213,7 +1213,7 @@ function checkTunnel() {
 
 server.listen(PORT, () => {
   recoverSessions();
-  console.log(`✅ TmuxHub running → http://localhost:${PORT}`);
+  console.log(`✅ NexTmux running → http://localhost:${PORT}`);
   console.log("🔑 Password is configured via DASHBOARD_PASSWORD");
   console.log(`📺 View tmux session: tmux attach -t term-1`);
   console.log(`👀 AI monitor: ${monitorConfig.enabled ? "enabled" : "disabled"} (poll=${monitorConfig.pollIntervalMs}ms, lines=${monitorConfig.linesToInspect})`);

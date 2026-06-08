@@ -1,4 +1,4 @@
-# TmuxHub Multi-CLI: Developer Quick Reference
+# NexTmux Multi-CLI: Developer Quick Reference
 
 ## Quick Links
 
@@ -194,7 +194,7 @@ npm start
 ## File Organization
 
 ```
-TmuxHub/
+NexTmux/
 ├── server.js                          # Main entry, detectCliType()
 ├── lib/
 │   ├── patternEngine.js              # convertCliProfilePatterns()

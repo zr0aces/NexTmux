@@ -1,6 +1,6 @@
-# Contributing to TmuxHub
+# Contributing to NexTmux
 
-Thanks for your interest in improving TmuxHub.
+Thanks for your interest in improving NexTmux.
 
 ## Before you start
 
