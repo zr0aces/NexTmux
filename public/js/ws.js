@@ -30,6 +30,7 @@ function handleMsg(d) {
   if (d.type === 'cwd') updateCwd(d.id, d.cwd);
   if (d.type === 'aiState') updateAIState(d.id, d.state);
   if (d.type === 'monitorMeta') updateMonitorMeta(d.id, d);
+  if (d.type === 'sessionAttached') updateSessionAttached(d.id, d.attached);
   if (d.type === 'snapshot') {
     const box = document.getElementById('logs-' + d.id);
     if (box) {
