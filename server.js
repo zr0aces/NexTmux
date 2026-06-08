@@ -12,6 +12,7 @@ const { createWatcherEngine, getNewLinesCount, cleanRateLimitLine } = require(".
 const { createMessageProcessor, RATE_LIMIT_PATTERN_NAMES } = require("./lib/messageProcessor");
 
 const { sanitizeSessionName, tmuxExec, tmuxExecAsync, isAlive, resolveSessionId } = require("./lib/tmuxService");
+const { parseGlobalPaneInfo } = require("./lib/paneInfoParser");
 const {
   SESSION_TTL_MS,
   timingSafePasswordMatch,
@@ -54,7 +55,7 @@ const issueAlertTime = new Map(); // key: alert key, value: timestamp
 const ISSUE_ALERT_COOLDOWN_MS = 120000; // 120s cooldown per issue key
 const RATE_LIMIT_PATTERNS = RATE_LIMIT_PATTERN_NAMES;
 
-let globalPaneInfo = new Map(); // sessionName -> { cwd, paneCmd }
+let globalPaneInfo = new Map(); // sessionName -> { cwd, paneCmd, sessionId, sessionAttached }
 let lastGlobalPaneFetch = 0;
 const GLOBAL_PANE_FETCH_INTERVAL = 3000; // fetch every 3 seconds
 
@@ -63,16 +64,11 @@ async function updateGlobalPaneInfo() {
   if (now - lastGlobalPaneFetch < GLOBAL_PANE_FETCH_INTERVAL) return;
   lastGlobalPaneFetch = now;
   try {
-    const raw = await tmuxExecAsync("list-panes", "-a", "-F", "#{session_name}|||#{pane_current_path}|||#{pane_current_command}");
-    const nextInfo = new Map();
-    for (const line of raw.trim().split("\n")) {
-      if (!line) continue;
-      const parts = line.split("|||");
-      if (parts.length >= 3) {
-        nextInfo.set(parts[0], { cwd: parts[1] || "", paneCmd: parts[2] || "" });
-      }
-    }
-    globalPaneInfo = nextInfo;
+    const raw = await tmuxExecAsync(
+      "list-panes", "-a", "-F",
+      "#{session_name}|||#{session_id}|||#{pane_current_path}|||#{pane_current_command}|||#{window_active}|||#{pane_active}|||#{session_attached}"
+    );
+    globalPaneInfo = parseGlobalPaneInfo(raw);
   } catch (e) {
     // Silent fail, will retry next interval
   }
