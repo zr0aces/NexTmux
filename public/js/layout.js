@@ -83,6 +83,7 @@ function updateSplitGrid() {
 
 function selectTab(id) {
   activeTab = id;
+  localStorage.setItem('tmuxhub.activeTab.v1', id);
   document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.id === id));
   document.querySelectorAll('.tab-panel').forEach(p => p.classList.toggle('active', p.dataset.id === id));
   setTimeout(sendResize, 0);

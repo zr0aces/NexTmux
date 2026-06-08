@@ -90,3 +90,43 @@ test("lastMatchedLine is persisted and hydrated correctly", async () => {
   assert.equal(w2.lastPromptExcerpt, "some long buffer");
   try { fs.unlinkSync(filePath); } catch {}
 });
+
+test("hydrateWorker uses tmuxSessionId key when available", async () => {
+  const filePath = path.join(os.tmpdir(), `ssm-stable-${Date.now()}.json`);
+  const mgr1 = createSessionStateManager({ stateFilePath: filePath });
+  const w1 = { sessionName: "term-1", tmuxSessionId: "$1" };
+  mgr1.setWaitingState(w1, "waiting");
+  await new Promise(r => setTimeout(r, 600));
+
+  const mgr2 = createSessionStateManager({ stateFilePath: filePath });
+  // Same tmuxSessionId but different sessionName (simulates rename)
+  const w2 = { sessionName: "term-1-renamed", tmuxSessionId: "$1" };
+  mgr2.hydrateWorker(w2);
+  assert.equal(w2.waitingState, "waiting");
+  try { fs.unlinkSync(filePath); } catch {}
+});
+
+test("hydrateWorker falls back to sessionName when tmuxSessionId is null", async () => {
+  const filePath = path.join(os.tmpdir(), `ssm-fallback-${Date.now()}.json`);
+  const mgr1 = createSessionStateManager({ stateFilePath: filePath });
+  const w1 = { sessionName: "term-2", tmuxSessionId: null };
+  mgr1.setWaitingState(w1, "idle");
+  await new Promise(r => setTimeout(r, 600));
+
+  const mgr2 = createSessionStateManager({ stateFilePath: filePath });
+  const w2 = { sessionName: "term-2", tmuxSessionId: null };
+  mgr2.hydrateWorker(w2);
+  assert.equal(w2.waitingState, "idle");
+  try { fs.unlinkSync(filePath); } catch {}
+});
+
+test("removeSession(worker) clears entry by tmuxSessionId key", () => {
+  const mgr = createSessionStateManager({ stateFilePath: path.join(os.tmpdir(), `ssm-rm-${Date.now()}.json`) });
+  const w = { sessionName: "term-3", tmuxSessionId: "$3" };
+  mgr.setWaitingState(w, "waiting");
+  mgr.removeSession(w);
+  const w2 = { sessionName: "term-3", tmuxSessionId: "$3" };
+  mgr.hydrateWorker(w2);
+  // After removal, hydrateWorker finds nothing → default "running"
+  assert.equal(w2.waitingState, "running");
+});

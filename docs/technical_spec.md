@@ -10,8 +10,10 @@ TmuxHub is a lightweight, real-time developer terminal dashboard and workspace m
 
 ### Key Features
 * **Native Tmux Execution**: Seamless bidirectional mirroring between the web console and host terminals.
+* **Stable Session Identity**: Each worker tracks the tmux-assigned `$session_id` (e.g. `$3`) — a stable identifier that survives session renames — used to key persistent state and detect attached clients.
 * **AI wait-state Supervision**: A state machine that tracks shell output patterns and transitions workers between `running`, `idle`, and `waiting` states.
 * **Rate-Limit Auto-Recovery**: Automated extraction of rate-limit reset times with scheduled resume triggers (sending input keys to tmux panes when time limits expire).
+* **Multi-CLI Support**: Automatic detection of Claude, Codex, and Google Agy CLIs with CLI-specific pattern matching and auto-responses.
 * **Secure Session Mirroring**: HTTP Cookie token-based authentication and secure password encryption within client-side browser database storage.
 
 ---
@@ -61,13 +63,14 @@ The backend server (`server.js`) acts as the central router and coordinator. It 
 
 ### 2.2 Server-Side Helper Modules (`lib/`)
 The backend relies on isolated modules to implement specialized logic, subprocess bindings, security, and alerts:
-1. **`tmuxService.js`**: Contains native `tmux` subprocess execution bindings (`tmuxExec`, `tmuxExecAsync`, `isAlive`) and safety name validation (`sanitizeSessionName`), keeping terminal execution details decoupled from routing.
-2. **`authService.js`**: Manages HTTP session creation, cookie signing, timed session-pruning, security matching (`timingSafePasswordMatch`), and IP-based rate limiting to prevent brute-force attacks.
-3. **`patternEngine.js`**: Core regular expression analyzer. Compiled regexes check shell history to detect active requests or rate-limit warnings. It parses complex reset strings (relative times like `3h 15m` or absolute timestamps like `12:20am (Asia/Bangkok)`) into UTC milliseconds.
-4. **`watcherEngine.js`**: Monitors output differences over time. If a session is quiet, it transitions the worker's status from `running` to `idle` after the configured threshold.
-5. **`messageProcessor.js`**: Analyzes text layout cues (e.g. Yes/No questions `[y/N]`, numbered menus `1. Option`, and key requests) to formulate auto-responses for Auto Mode.
-6. **`sessionStateManager.js`**: Serializes worker configurations, activity logs, and rate-limit timers. Persists states to `state/session-state.json` via a debounced, 500ms delay write queue.
-7. **`telegramService.js`**: Connects to the Telegram Bot API to deliver alerts when workers stall.
+1. **`tmuxService.js`**: Native `tmux` subprocess execution bindings (`tmuxExec`, `tmuxExecAsync`, `isAlive`), safety name validation (`sanitizeSessionName`), and stable session identity resolution (`resolveSessionId`, `parseSessionIdFromList`) — converts a mutable session name into the tmux-assigned `$session_id`.
+2. **`paneInfoParser.js`**: Pure `parseGlobalPaneInfo(raw)` function that parses `tmux list-panes -a` output into a `Map<sessionName, { cwd, paneCmd, sessionId, sessionAttached }>`, filtering to the active window's active pane only.
+3. **`authService.js`**: Manages HTTP session creation, cookie signing, timed session-pruning, security matching (`timingSafePasswordMatch`), and IP-based rate limiting to prevent brute-force attacks.
+4. **`patternEngine.js`**: Core regular expression analyzer. Compiled regexes check shell history to detect active requests or rate-limit warnings. It parses complex reset strings (relative times like `3h 15m` or absolute timestamps like `12:20am (Asia/Bangkok)`) into UTC milliseconds.
+5. **`watcherEngine.js`**: Monitors output differences over time. If a session is quiet, it transitions the worker's status from `running` to `idle` after the configured threshold.
+6. **`messageProcessor.js`**: Analyzes text layout cues (e.g. Yes/No questions `[y/N]`, numbered menus `1. Option`, and key requests) to formulate auto-responses for Auto Mode.
+7. **`sessionStateManager.js`**: Serializes worker configurations, activity logs, and rate-limit timers. Persists states to `state/session-state.json` via a debounced, 500ms write queue. State is keyed by the stable `tmuxSessionId` (`$N`) when available, with `sessionName` as fallback — state survives session renames.
+8. **`telegramService.js`**: Connects to the Telegram Bot API to deliver alerts when workers stall.
 
 ### 2.3 Frontend Client (`public/`)
 The frontend is written in vanilla ES6 JavaScript and HTML5/CSS3. It does not pull in major frameworks (like React or Vue) to keep loads fast and latency low.
@@ -88,7 +91,7 @@ All REST API endpoints require session cookie validation, except `/api/login`.
 | :--- | :--- | :--- | :--- | :--- |
 | `/api/login` | POST | `{ pw: string }` | `{ ok: boolean }` | Checks password; issues `token` cookie on success. |
 | `/api/config` | GET | None | Config JSON object | Returns `basePath`, `favorites`, `defaultCommand`, and monitor configurations. |
-| `/api/workers` | GET | None | Array of worker objects | Returns all active sessions, recent logs, statuses, and monitor metadata. |
+| `/api/workers` | GET | None | Array of worker objects | Returns all active sessions, recent logs, statuses, monitor metadata, and `sessionAttached` (0/1). |
 | `/api/scan` | GET | None | Array of discovered sessions | Inspects running host processes for untracked `term-*` tmux sessions. |
 | `/api/attach` | POST | `{ sessionName, cwd }` | `{ id: string }` | Imports an untracked tmux session onto the dashboard. |
 | `/api/spawn` | POST | `{ cwd, cmd }` | `{ ok: boolean, id: string }` | Spawns a new tmux session and initiates monitoring. |
@@ -105,9 +108,9 @@ All REST API endpoints require session cookie validation, except `/api/login`.
 Real-time messages are transmitted as JSON packets over a single WebSocket connection.
 
 #### Server-to-Client Broadcasts
-* **`spawned`**: Broadcast when a worker session is created or attached.
+* **`spawned`**: Broadcast when a worker session is created or attached. Recovery broadcasts (server restart) include `fromRecovery: true` so the client does not steal tab focus.
   ```json
-  { "type": "spawned", "id": "1", "cwd": "/projects", "cmd": "claude", "status": "running" }
+  { "type": "spawned", "id": "1", "cwd": "/projects", "cmd": "claude", "cliType": "claude", "status": "running", "fromRecovery": false }
   ```
 * **`log`**: Emitted when input data is forwarded to the shell.
   ```json
@@ -134,6 +137,10 @@ Real-time messages are transmitted as JSON packets over a single WebSocket conne
   ```json
   { "type": "snapshot", "id": "1", "lines": ["line 1", "line 2", "..."] }
   ```
+* **`sessionAttached`**: Broadcast when a real tmux client attaches or detaches from a session (detected via `#{session_attached}` in `list-panes` output, polled every 3 seconds). The client renders a green ring indicator on the tab dot and badge.
+  ```json
+  { "type": "sessionAttached", "id": "1", "attached": true }
+  ```
 
 #### Client-to-Server Messages
 * **`resize`**: Adjusts standard row and column parameters on the backend tmux terminal.
@@ -155,15 +162,23 @@ TmuxHub interacts directly with the system's `tmux` binary. When spawning a work
 tmux new-session -d -s term-{id} -c {cwd} -e "CLAUDECODE="
 tmux send-keys -t term-{id} "{cmd}" Enter
 ```
+
+After creating the session, the stable tmux session ID (`$N`) is resolved immediately:
+```javascript
+const tmuxSessionId = resolveSessionId(sessionName); // e.g. "$3"
+```
+This ID is stored on the worker object and used as the persistence key in `sessionStateManager`, so state survives session renames.
+
 * **Output Polling**: Every second (configurable), the server runs:
   ```bash
   tmux capture-pane -t term-{id} -p -S -500 -J
   ```
   to read the pane's text content.
-* **CWD Tracking**: The active path is discovered via:
-  ```bash
-  tmux display-message -t term-{id} -p "#{pane_current_path}"
+* **Global Pane Info** (polled every 3 seconds): A single `list-panes -a` call collects CWD, current command, session identity, and attached-client state for all sessions at once:
   ```
+  #{session_name}|||#{session_id}|||#{pane_current_path}|||#{pane_current_command}|||#{window_active}|||#{pane_active}|||#{session_attached}
+  ```
+  Only the active window's active pane is stored per session (via `parseGlobalPaneInfo` in `lib/paneInfoParser.js`). This fixes CWD/command tracking for sessions with multiple windows or panes.
 * **Keystroke Delivery**: Key events are mapped to the pane using safe command arrays:
   ```javascript
   // For standard strings

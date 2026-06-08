@@ -63,12 +63,14 @@ To support developer workflows, the TmuxHub interface must implement the followi
   * 🔵 **Working**: Processing logs, code generation, or testing tasks.
   * 🟢 **Idle**: No terminal changes detected for more than the inactivity limit.
   * 🟡 **Waiting**: Stalled on a prompt match requiring human intervention.
+* **tmux Attached Indicator**: A green ring on the tab dot and badge shows a native tmux client is currently attached to the session (`tmux attach -t term-N`). Updates within 3 seconds of attach or detach events.
 * **Reset Timer tooltips**: Displays the estimated duration remaining when a rate-limit error occurs, indicating whether automatic execution recovery is scheduled (`[armed]`).
 
 ### 2.5 Layout & Window Management
 * **Dual Layout Modes**:
   * **Tab View**: Displays a single, high-density active card at a time with a clickable tab list. Double-clicking a tab allows setting a custom title.
   * **Split View**: Arranges all active worker sessions side-by-side in a responsive column grid.
+* **Persistent Tab Selection**: The active tab is saved across page reloads and server restarts. On reconnect, the dashboard restores the previously selected session without stealing focus from recovered sessions.
 * **Dynamic Resizing**: Calculates browser container sizes and updates rows and columns on the host system's tmux session dynamically.
 
 ### 2.6 Developer Utility Panes (Split Views)

@@ -547,6 +547,15 @@ header h1 {
   animation: pulse 1.5s ease-in-out infinite;
 }
 
+.tab-dot.tmux-attached {
+  outline: 2px solid #3fb950;
+  outline-offset: 1px;
+}
+
+.badge.tmux-attached {
+  box-shadow: 0 0 0 1px #3fb950;
+}
+
 @keyframes pulse {
   0%, 100% { opacity: 1; transform: scale(1.1); }
   50% { opacity: 0.3; transform: scale(0.9); }
