@@ -44,6 +44,10 @@ function closeTab(id) {
   if (typeof sendResize === 'function') {
     setTimeout(sendResize, 50);
   }
+
+  if (typeof syncUIPlaceholders === 'function') {
+    syncUIPlaceholders();
+  }
 }
 
 function reopenTab(id) {
@@ -63,6 +67,10 @@ function reopenTab(id) {
   // Send terminal resize to active panel(s)
   if (typeof sendResize === 'function') {
     setTimeout(sendResize, 50);
+  }
+
+  if (typeof syncUIPlaceholders === 'function') {
+    syncUIPlaceholders();
   }
 }
 
@@ -252,4 +260,30 @@ function restoreTabOrder() {
     
     syncCardPlacement();
   } catch (e) {}
+}
+
+function syncUIPlaceholders() {
+  const visibleCount = document.querySelectorAll('.tab:not(.closed)').length;
+  let tabPlaceholder = document.getElementById('tab-placeholder');
+  let splitPlaceholder = document.getElementById('split-placeholder');
+
+  if (visibleCount === 0) {
+    if (!tabPlaceholder) {
+      tabPlaceholder = document.createElement('div');
+      tabPlaceholder.id = 'tab-placeholder';
+      tabPlaceholder.className = 'placeholder-card';
+      tabPlaceholder.innerHTML = '<h3>No open tabs</h3><p>Click <button class="inline-placeholder-btn" onclick="scanSessions()">🔍 Scan</button> to attach existing tmux sessions, or click the <span class="placeholder-plus">+</span> button in the header to launch a new one.</p>';
+      document.getElementById('tab-content').appendChild(tabPlaceholder);
+    }
+    if (!splitPlaceholder) {
+      splitPlaceholder = document.createElement('div');
+      splitPlaceholder.id = 'split-placeholder';
+      splitPlaceholder.className = 'placeholder-card';
+      splitPlaceholder.innerHTML = '<h3>No open tabs</h3><p>Click <button class="inline-placeholder-btn" onclick="scanSessions()">🔍 Scan</button> to attach existing tmux sessions, or click the <span class="placeholder-plus">+</span> button in the header to launch a new one.</p>';
+      document.getElementById('split-content').appendChild(splitPlaceholder);
+    }
+  } else {
+    if (tabPlaceholder) tabPlaceholder.remove();
+    if (splitPlaceholder) splitPlaceholder.remove();
+  }
 }

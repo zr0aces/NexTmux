@@ -55,9 +55,9 @@ function renderTitle(id, cwd, cmd) {
   const sName = (tab && tab.dataset.sessionName) || '';
   const displayName = sName || ('worker-' + id);
   const folder = tabCwd.replace(/\/$/, '').split('/').pop() || tabCwd;
-  let text = '';
-  if (customTitles[sName]) {
-    text = customTitles[sName];
+  const titleKey = sName || id;
+  if (customTitles[titleKey]) {
+    text = customTitles[titleKey];
   } else {
     text = tabCmd && folder ? displayName + ' · ' + tabCmd + ' · ' + folder
          : tabCmd ? displayName + ' · ' + tabCmd
@@ -237,6 +237,10 @@ function ensureCard(id, cwd, status, logs, cmd, reason, monitorMeta) {
   if (status === 'running') updateExitReason(id, null);
   if (monitorMeta) updateMonitorMeta(id, monitorMeta);
   setTimeout(sendResize, 100);
+
+  if (typeof syncUIPlaceholders === 'function') {
+    syncUIPlaceholders();
+  }
 }
 
 function bindCard(id, root) {
@@ -577,6 +581,9 @@ function removeWorker(id) {
   if (typeof saveTabOrder === 'function') {
     saveTabOrder();
   }
+  if (typeof syncUIPlaceholders === 'function') {
+    syncUIPlaceholders();
+  }
 }
 
 function updateCwd(id, cwd) {
@@ -794,10 +801,32 @@ function showScanModal(sessions) {
       scwd.textContent = (ct.cmd ? '[' + ct.cmd + '] ' : '') + displayPath(ct.cwd);
       scwd.title = ct.cwd;
 
+      const removeAction = document.createElement('button');
+      removeAction.innerHTML = '🗑️';
+      removeAction.title = 'Permanently remove this worker';
+      removeAction.style.cssText = 'background:none;border:none;color:#f85149;cursor:pointer;font-size:12px;padding:4px 8px;margin-left:auto;z-index:10;transition:opacity .15s;opacity:0.6';
+      removeAction.addEventListener('mouseenter', () => removeAction.style.opacity = '1');
+      removeAction.addEventListener('mouseleave', () => removeAction.style.opacity = '0.6');
+      removeAction.addEventListener('click', e => {
+        e.preventDefault();
+        e.stopPropagation();
+        if (confirm('Are you sure you want to remove this worker? This will stop the dashboard tracking for this session.')) {
+          removeWorker(ct.id);
+          row.remove();
+          // If no more closed tabs are left, reload modal
+          const remainingClosed = document.querySelectorAll('.tab.closed').length;
+          if (remainingClosed === 0) {
+            overlay.remove();
+            scanSessions();
+          }
+        }
+      });
+
       info.appendChild(sname);
       info.appendChild(scwd);
       row.appendChild(cb);
       row.appendChild(info);
+      row.appendChild(removeAction);
       listClosed.appendChild(row);
       checkboxes.push({ cb, type: 'reopen', ct });
     });
@@ -850,7 +879,16 @@ function showScanModal(sessions) {
     // Attach discovered sessions
     if (selectedDiscover.length > 0) {
       selectedDiscover.reduce(
-        (chain, f) => chain.then(() => apiPost('/api/attach', { sessionName: f.sessionName, cwd: f.cwd })),
+        (chain, f) => chain.then(() => 
+          apiPost('/api/attach', { sessionName: f.sessionName, cwd: f.cwd })
+            .then(r => r.json())
+            .then(d => {
+              if (d && d.id) {
+                if (typeof reopenTab === 'function') reopenTab(d.id);
+                if (typeof selectTab === 'function') selectTab(d.id);
+              }
+            })
+        ),
         Promise.resolve()
       );
     }

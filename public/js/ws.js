@@ -11,6 +11,7 @@ function initWS() {
     document.getElementById('status-dot').classList.remove('off');
     reconnectInterval = 1000; // reset on success
     sendResize();
+    loadAll();
   };
   ws.onclose = () => {
     document.getElementById('status-dot').classList.add('off');
@@ -141,8 +142,59 @@ function apiGet(url) {
 function loadAll() {
   apiGet('/api/workers')
     .then(list => {
+      const serverIds = new Set(list.map(w => String(w.id)));
+
+      // Prune client DOM tabs/panels whose worker IDs are no longer in the server list
+      document.querySelectorAll('.tab').forEach(tab => {
+        const id = tab.dataset.id;
+        if (id && !serverIds.has(id)) {
+          tab.remove();
+          const panel = document.querySelector('.tab-panel[data-id="' + id + '"]');
+          if (panel) panel.remove();
+          const logsBox = document.getElementById('logs-' + id);
+          if (logsBox && window.resizeObserver) {
+            window.resizeObserver.unobserve(logsBox);
+          }
+        }
+      });
+
+      // Prune closedTabs of any IDs that are no longer active on the server
+      if (typeof closedTabs !== 'undefined') {
+        let changed = false;
+        closedTabs.forEach(id => {
+          if (!serverIds.has(id)) {
+            closedTabs.delete(id);
+            changed = true;
+          }
+        });
+        if (changed && typeof saveClosedTabs === 'function') {
+          saveClosedTabs();
+        }
+      }
+
       list.forEach(w => {
+        const cardExists = !!document.getElementById('card-' + w.id);
         ensureCard(w.id, w.cwd, w.status, w.logs, w.cmd, w.exitReason || null, w);
+        if (cardExists) {
+          // Sync dataset properties that could have changed
+          const tab = document.querySelector('.tab[data-id="' + w.id + '"]');
+          if (tab) {
+            tab.dataset.cwd = w.cwd;
+            tab.dataset.cmd = w.cmd || '';
+            if (w.sessionName) tab.dataset.sessionName = w.sessionName;
+          }
+          if (typeof renderTitle === 'function') {
+            renderTitle(w.id, w.cwd, w.cmd);
+          }
+          if (typeof updateStatus === 'function') {
+            updateStatus(w.id, w.status, w.exitReason || null);
+          }
+          const logsBox = document.getElementById('logs-' + w.id);
+          if (logsBox && w.logs) {
+            logsBox.innerHTML = '';
+            w.logs.forEach(l => appendLog(w.id, l.src, l.text));
+          }
+        }
         if (w.aiState) updateAIState(w.id, w.aiState);
         updateMonitorMeta(w.id, w);
         updateSessionAttached(w.id, w.sessionAttached === 1);
@@ -158,6 +210,11 @@ function loadAll() {
         if (visibleTabs.length > 0) {
           selectTab(visibleTabs[0].dataset.id);
         }
+      }
+      
+      // Sync placeholders after loading everything
+      if (typeof syncUIPlaceholders === 'function') {
+        syncUIPlaceholders();
       }
     });
 }
