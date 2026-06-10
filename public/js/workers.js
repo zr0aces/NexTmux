@@ -157,8 +157,11 @@ function ensureCard(id, cwd, status, logs, cmd, reason, monitorMeta) {
   tab.dataset.cmd = cmdLabel;
   if (monitorMeta && monitorMeta.sessionName) tab.dataset.sessionName = monitorMeta.sessionName;
   var folder = cwd.replace(/\/$/, '').split('/').pop() || cwd;
-  tab.innerHTML = '<span class="tab-dot' + (status === 'stopped' ? ' stopped' : '') + (status === 'completed' ? ' completed' : '') + '" id="tab-dot-' + id + '"></span><span class="tab-label" id="tab-label-' + id + '">#' + id + ' ' + escapeHtml(cmd || '') + (folder ? ' · ' + escapeHtml(folder) : '') + '</span>';
-  tab.addEventListener('click', () => selectTab(id));
+  tab.innerHTML = '<span class="tab-dot' + (status === 'stopped' ? ' stopped' : '') + (status === 'completed' ? ' completed' : '') + '" id="tab-dot-' + id + '"></span><span class="tab-label" id="tab-label-' + id + '">#' + id + ' ' + escapeHtml(cmd || '') + (folder ? ' · ' + escapeHtml(folder) : '') + '</span><span class="tab-close" id="tab-close-' + id + '" title="Close Tab">&times;</span>';
+  tab.addEventListener('click', e => {
+    if (e.target.classList.contains('tab-close')) return;
+    selectTab(id);
+  });
   tab.addEventListener('dblclick', e => {
     e.stopPropagation();
     const sName = tab.dataset.sessionName || id;
@@ -174,10 +177,22 @@ function ensureCard(id, cwd, status, logs, cmd, reason, monitorMeta) {
     saveCustomTitles();
     renderTitle(id);
   });
+  const closeBtn = tab.querySelector('.tab-close');
+  if (closeBtn) {
+    closeBtn.addEventListener('click', e => {
+      e.stopPropagation();
+      closeTab(id);
+    });
+  }
   bindTabDrag(tab);
   document.getElementById('tab-bar').appendChild(tab);
 
   bindCard(id, panel);
+
+  if (typeof closedTabs !== 'undefined' && closedTabs.has(id)) {
+    tab.classList.add('closed');
+    panel.classList.add('closed');
+  }
 
   const effLayout = typeof getEffectiveLayout === 'function' ? getEffectiveLayout() : layout;
   if (effLayout === 'tab') {
@@ -187,7 +202,7 @@ function ensureCard(id, cwd, status, logs, cmd, reason, monitorMeta) {
   }
   updateSplitGrid();
 
-  if (activeTab === null) selectTab(id);
+  if (activeTab === null && !(typeof closedTabs !== 'undefined' && closedTabs.has(id))) selectTab(id);
 
   if (status === 'stopped' || status === 'completed') {
     const btn = document.getElementById('kill-' + id);
@@ -521,6 +536,13 @@ function removeWorker(id) {
   apiPost('/api/remove', { id });
   if (typeof closeGitDiff === 'function') closeGitDiff(id);
 
+  if (typeof closedTabs !== 'undefined') {
+    closedTabs.delete(id);
+    if (typeof saveClosedTabs === 'function') {
+      saveClosedTabs();
+    }
+  }
+
   const logsBox = document.getElementById('logs-' + id);
   if (logsBox && window.resizeObserver) {
     window.resizeObserver.unobserve(logsBox);
@@ -641,10 +663,17 @@ function scanSessions() {
   apiGet('/api/scan')
     .then(found => {
       btn.textContent = '🔍';
-      if (!found.length) { alert('No new tmux sessions found.'); return; }
+      const closedCount = document.querySelectorAll('.tab.closed').length;
+      if (!found.length && closedCount === 0) { alert('No new tmux sessions or closed tabs found.'); return; }
       showScanModal(found);
     })
-    .catch(() => { btn.textContent = '🔍'; });
+    .catch(() => {
+      btn.textContent = '🔍';
+      const closedCount = document.querySelectorAll('.tab.closed').length;
+      if (closedCount > 0) {
+        showScanModal([]);
+      }
+    });
 }
 
 function showScanModal(sessions) {
@@ -657,52 +686,114 @@ function showScanModal(sessions) {
   overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.6);display:flex;align-items:center;justify-content:center;z-index:9999';
 
   const modal = document.createElement('div');
-  modal.style.cssText = 'background:#161b22;border:1px solid #30363d;border-radius:10px;padding:20px 24px;min-width:340px;max-width:520px;width:90%;max-height:70vh;display:flex;flex-direction:column;gap:12px;box-shadow:0 8px 32px rgba(0,0,0,0.5)';
+  modal.style.cssText = 'background:#161b22;border:1px solid #30363d;border-radius:10px;padding:20px 24px;min-width:380px;max-width:540px;width:90%;max-height:85vh;display:flex;flex-direction:column;gap:12px;box-shadow:0 8px 32px rgba(0,0,0,0.5)';
 
   const title = document.createElement('div');
   title.style.cssText = 'font-size:14px;font-weight:600;color:#e6edf3';
-  title.textContent = '🔍 Discovered tmux Sessions';
+  title.textContent = '🔍 Session & Tab Manager';
   modal.appendChild(title);
 
-  const subtitle = document.createElement('div');
-  subtitle.style.cssText = 'font-size:11px;color:#8b949e';
-  subtitle.textContent = 'Select sessions to attach to the dashboard:';
-  modal.appendChild(subtitle);
+  const container = document.createElement('div');
+  container.style.cssText = 'overflow-y:auto;max-height:50vh;display:flex;flex-direction:column;gap:16px;padding-right:4px';
 
-  const list = document.createElement('div');
-  list.style.cssText = 'overflow-y:auto;max-height:260px;display:flex;flex-direction:column;gap:6px';
+  const checkboxes = [];
 
-  const checkboxes = sessions.map(f => {
-    const row = document.createElement('label');
-    row.style.cssText = 'display:flex;align-items:center;gap:10px;padding:7px 10px;border-radius:6px;cursor:pointer;background:#0d1117;border:1px solid #21262d;transition:border-color .15s';
-    row.addEventListener('mouseenter', () => row.style.borderColor = '#58a6ff');
-    row.addEventListener('mouseleave', () => row.style.borderColor = '#21262d');
+  // 1. Discovered tmux sessions
+  if (sessions && sessions.length > 0) {
+    const discHeader = document.createElement('div');
+    discHeader.style.cssText = 'font-size:12px;font-weight:600;color:#8b949e;margin-bottom:4px';
+    discHeader.textContent = '⚡ Discovered tmux Sessions (Attach)';
+    container.appendChild(discHeader);
 
-    const cb = document.createElement('input');
-    cb.type = 'checkbox';
-    cb.checked = true;
-    cb.style.cssText = 'accent-color:#58a6ff;width:14px;height:14px;cursor:pointer';
+    const listDiscovered = document.createElement('div');
+    listDiscovered.style.cssText = 'display:flex;flex-direction:column;gap:6px';
 
-    const info = document.createElement('div');
-    info.style.cssText = 'display:flex;flex-direction:column;gap:2px;overflow:hidden';
+    sessions.forEach(f => {
+      const row = document.createElement('label');
+      row.style.cssText = 'display:flex;align-items:center;gap:10px;padding:7px 10px;border-radius:6px;cursor:pointer;background:#0d1117;border:1px solid #21262d;transition:border-color .15s';
+      row.addEventListener('mouseenter', () => row.style.borderColor = '#58a6ff');
+      row.addEventListener('mouseleave', () => row.style.borderColor = '#21262d');
 
-    const sname = document.createElement('span');
-    sname.style.cssText = 'font-size:12px;font-weight:600;color:#e6edf3;font-family:monospace';
-    sname.textContent = f.sessionName;
+      const cb = document.createElement('input');
+      cb.type = 'checkbox';
+      cb.checked = true;
+      cb.style.cssText = 'accent-color:#58a6ff;width:14px;height:14px;cursor:pointer';
 
-    const scwd = document.createElement('span');
-    scwd.style.cssText = 'font-size:11px;color:#8b949e;overflow:hidden;text-overflow:ellipsis;white-space:nowrap';
-    scwd.textContent = displayPath(f.cwd);
-    scwd.title = f.cwd;
+      const info = document.createElement('div');
+      info.style.cssText = 'display:flex;flex-direction:column;gap:2px;overflow:hidden';
 
-    info.appendChild(sname);
-    info.appendChild(scwd);
-    row.appendChild(cb);
-    row.appendChild(info);
-    list.appendChild(row);
-    return { cb, f };
+      const sname = document.createElement('span');
+      sname.style.cssText = 'font-size:12px;font-weight:600;color:#e6edf3;font-family:monospace';
+      sname.textContent = f.sessionName;
+
+      const scwd = document.createElement('span');
+      scwd.style.cssText = 'font-size:11px;color:#8b949e;overflow:hidden;text-overflow:ellipsis;white-space:nowrap';
+      scwd.textContent = displayPath(f.cwd);
+      scwd.title = f.cwd;
+
+      info.appendChild(sname);
+      info.appendChild(scwd);
+      row.appendChild(cb);
+      row.appendChild(info);
+      listDiscovered.appendChild(row);
+      checkboxes.push({ cb, type: 'discover', f });
+    });
+    container.appendChild(listDiscovered);
+  }
+
+  // 2. Closed Tabs
+  const closedTabsList = [];
+  document.querySelectorAll('.tab.closed').forEach(el => {
+    const id = el.dataset.id;
+    const sessionName = el.dataset.sessionName || id;
+    const cwd = el.dataset.cwd || '';
+    const cmd = el.dataset.cmd || '';
+    closedTabsList.push({ id, sessionName, cwd, cmd });
   });
-  modal.appendChild(list);
+
+  if (closedTabsList.length > 0) {
+    const closedHeader = document.createElement('div');
+    closedHeader.style.cssText = 'font-size:12px;font-weight:600;color:#8b949e;margin-top:4px;margin-bottom:4px';
+    closedHeader.textContent = '📁 Closed Dashboard Tabs (Reopen)';
+    container.appendChild(closedHeader);
+
+    const listClosed = document.createElement('div');
+    listClosed.style.cssText = 'display:flex;flex-direction:column;gap:6px';
+
+    closedTabsList.forEach(ct => {
+      const row = document.createElement('label');
+      row.style.cssText = 'display:flex;align-items:center;gap:10px;padding:7px 10px;border-radius:6px;cursor:pointer;background:#0d1117;border:1px solid #21262d;transition:border-color .15s';
+      row.addEventListener('mouseenter', () => row.style.borderColor = '#ea580c');
+      row.addEventListener('mouseleave', () => row.style.borderColor = '#21262d');
+
+      const cb = document.createElement('input');
+      cb.type = 'checkbox';
+      cb.checked = true;
+      cb.style.cssText = 'accent-color:#ea580c;width:14px;height:14px;cursor:pointer';
+
+      const info = document.createElement('div');
+      info.style.cssText = 'display:flex;flex-direction:column;gap:2px;overflow:hidden';
+
+      const sname = document.createElement('span');
+      sname.style.cssText = 'font-size:12px;font-weight:600;color:#e6edf3;font-family:monospace';
+      sname.textContent = ct.sessionName + ' (Worker #' + ct.id + ')';
+
+      const scwd = document.createElement('span');
+      scwd.style.cssText = 'font-size:11px;color:#8b949e;overflow:hidden;text-overflow:ellipsis;white-space:nowrap';
+      scwd.textContent = (ct.cmd ? '[' + ct.cmd + '] ' : '') + displayPath(ct.cwd);
+      scwd.title = ct.cwd;
+
+      info.appendChild(sname);
+      info.appendChild(scwd);
+      row.appendChild(cb);
+      row.appendChild(info);
+      listClosed.appendChild(row);
+      checkboxes.push({ cb, type: 'reopen', ct });
+    });
+    container.appendChild(listClosed);
+  }
+
+  modal.appendChild(container);
 
   // Select all / none toggles
   const toggleRow = document.createElement('div');
@@ -725,17 +816,33 @@ function showScanModal(sessions) {
   cancelBtn.addEventListener('click', () => overlay.remove());
 
   const attachBtn = document.createElement('button');
-  attachBtn.textContent = 'Attach Selected';
-  attachBtn.style.cssText = 'background:#1f6feb;border:none;border-radius:6px;color:#fff;font-size:12px;padding:5px 14px;cursor:pointer;font-weight:600';
+  attachBtn.id = 'scan-attach-btn';
+  attachBtn.textContent = 'Apply Selected';
+  attachBtn.style.cssText = 'background:#ea580c;border:none;border-radius:6px;color:#fff;font-size:12px;padding:5px 14px;cursor:pointer;font-weight:600';
   attachBtn.addEventListener('click', () => {
-    const selected = checkboxes.filter(({ cb }) => cb.checked).map(({ f }) => f);
+    const selectedDiscover = checkboxes.filter(({ cb, type }) => cb.checked && type === 'discover').map(({ f }) => f);
+    const selectedReopen = checkboxes.filter(({ cb, type }) => cb.checked && type === 'reopen').map(({ ct }) => ct);
+
     overlay.remove();
-    if (!selected.length) return;
-    // Sequential attach to prevent race-condition duplicates
-    selected.reduce(
-      (chain, f) => chain.then(() => apiPost('/api/attach', { sessionName: f.sessionName, cwd: f.cwd })),
-      Promise.resolve()
-    );
+
+    // Reopen closed tabs
+    let lastReopenedId = null;
+    selectedReopen.forEach(ct => {
+      reopenTab(ct.id);
+      lastReopenedId = ct.id;
+    });
+
+    if (lastReopenedId) {
+      selectTab(lastReopenedId);
+    }
+
+    // Attach discovered sessions
+    if (selectedDiscover.length > 0) {
+      selectedDiscover.reduce(
+        (chain, f) => chain.then(() => apiPost('/api/attach', { sessionName: f.sessionName, cwd: f.cwd })),
+        Promise.resolve()
+      );
+    }
   });
 
   btnRow.appendChild(cancelBtn);

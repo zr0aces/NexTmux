@@ -1747,3 +1747,30 @@ header h1 {
   border-color: var(--accent-primary);
   box-shadow: 0 0 12px rgba(59, 130, 246, 0.35);
 }
+
+/* Close Tab button styles */
+.tab-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  font-size: 10px;
+  line-height: 1;
+  color: var(--text-secondary);
+  transition: all 0.2s ease;
+  margin-left: 2px;
+}
+
+.tab-close:hover {
+  background: rgba(255, 255, 255, 0.15);
+  color: #f85149;
+}
+
+/* Tab and panel hiding styles for Closed Tabs */
+.tab.closed,
+.tab-panel.closed,
+#split-content .tab-panel.closed {
+  display: none !important;
+}

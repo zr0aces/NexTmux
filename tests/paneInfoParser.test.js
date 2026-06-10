@@ -10,7 +10,7 @@ test("keeps only active-window active-pane entry per session", () => {
     "term-1|||$1|||~/projects|||node|||1|||1|||0",   // active window, active pane ← keep
   ].join("\n");
   const result = parseGlobalPaneInfo(raw);
-  assert.equal(result.get("term-1").paneCmd, "node");
+  assert.equal(result.get("$1").paneCmd, "node");
 });
 
 test("ignores panes in inactive windows", () => {
@@ -19,14 +19,14 @@ test("ignores panes in inactive windows", () => {
     "term-1|||$1|||~/projects|||bash|||1|||1|||0",   // active window, active pane ← keep
   ].join("\n");
   const result = parseGlobalPaneInfo(raw);
-  assert.equal(result.get("term-1").paneCmd, "bash");
+  assert.equal(result.get("$1").paneCmd, "bash");
 });
 
 test("captures session_attached flag", () => {
   const raw = "term-1|||$1|||~/projects|||bash|||1|||1|||1\n";
   const result = parseGlobalPaneInfo(raw);
-  assert.equal(result.get("term-1").sessionAttached, "1");
-  assert.equal(result.get("term-1").sessionId, "$1");
+  assert.equal(result.get("$1").sessionAttached, "1");
+  assert.equal(result.get("$1").sessionId, "$1");
 });
 
 test("handles multiple sessions independently", () => {
@@ -35,9 +35,9 @@ test("handles multiple sessions independently", () => {
     "term-2|||$2|||~/b|||codex|||1|||1|||1",
   ].join("\n");
   const result = parseGlobalPaneInfo(raw);
-  assert.equal(result.get("term-1").paneCmd, "claude");
-  assert.equal(result.get("term-2").paneCmd, "codex");
-  assert.equal(result.get("term-2").sessionAttached, "1");
+  assert.equal(result.get("$1").paneCmd, "claude");
+  assert.equal(result.get("$2").paneCmd, "codex");
+  assert.equal(result.get("$2").sessionAttached, "1");
 });
 
 test("returns empty map for empty or null input", () => {

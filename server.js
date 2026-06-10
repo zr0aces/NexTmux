@@ -186,6 +186,10 @@ function inferExitReason(w, fallback) {
   return fallback || "Session exited (reason unknown).";
 }
 
+function getTmuxTarget(w) {
+  return w && w.tmuxSessionId ? w.tmuxSessionId : (w && w.sessionName) || null;
+}
+
 
 
 function startPolling(id) {
@@ -331,20 +335,20 @@ async function resizeWorker(id, cols, rows) {
   w.cols = cols;
   w.rows = rows;
   
-  if (!isAlive(w.sessionName)) return;
+  if (!isAlive(getTmuxTarget(w))) return;
 
   const c = cols || 80;
   const r = rows || 50;
 
   if (c !== w._lastCols || r !== w._lastRows) {
-    tmuxExec("resize-pane", "-t", w.sessionName, "-x", String(c), "-y", String(r));
-    tmuxExec("resize-window", "-t", w.sessionName, "-x", String(c), "-y", String(r));
+    tmuxExec("resize-pane", "-t", getTmuxTarget(w), "-x", String(c), "-y", String(r));
+    tmuxExec("resize-window", "-t", getTmuxTarget(w), "-x", String(c), "-y", String(r));
     w._lastCols = c;
     w._lastRows = r;
   }
 
   try {
-    const output = await tmuxExecAsync("capture-pane", "-t", w.sessionName, "-p", "-S", "-500", "-J");
+    const output = await tmuxExecAsync("capture-pane", "-t", getTmuxTarget(w), "-p", "-S", "-500", "-J");
     lastCapture.set(String(id), output);
     const lines = output.split("\n");
     w.logs = lines.slice(-200).map(text => ({ src: "stdout", text, ts: Date.now() }));
@@ -359,7 +363,7 @@ async function pollOutput(id) {
   if (!w || w._polling) return;  // skip if a previous poll cycle hasn't finished
   w._polling = true;
   try {
-  if (!isAlive(w.sessionName)) {
+  if (!isAlive(getTmuxTarget(w))) {
     if (w.pollTimer) clearInterval(w.pollTimer);
     w.pollTimer = null;
     w.status = 'completed';
@@ -374,20 +378,29 @@ async function pollOutput(id) {
   const rows = w.rows || 50;
   // Only resize when dimensions actually changed to avoid unnecessary tmux calls
   if (cols !== w._lastCols || rows !== w._lastRows) {
-    tmuxExec("resize-pane", "-t", w.sessionName, "-x", String(cols), "-y", String(rows));
-    tmuxExec("resize-window", "-t", w.sessionName, "-x", String(cols), "-y", String(rows));
+    tmuxExec("resize-pane", "-t", getTmuxTarget(w), "-x", String(cols), "-y", String(rows));
+    tmuxExec("resize-window", "-t", getTmuxTarget(w), "-x", String(cols), "-y", String(rows));
     w._lastCols = cols;
     w._lastRows = rows;
   }
-  const output = await tmuxExecAsync("capture-pane", "-t", w.sessionName, "-p", "-S", "-500", "-J");
+  const output = await tmuxExecAsync("capture-pane", "-t", getTmuxTarget(w), "-p", "-S", "-500", "-J");
   const newLinesCount = getNewLinesCount(output, lastCapture.get(id));
   w.totalLinesCount = (w.totalLinesCount || 0) + newLinesCount;
 
   // Query consolidated global pane info (saves spawning one sub-process per poll)
   await updateGlobalPaneInfo();
-  const cachedInfo = globalPaneInfo.get(w.sessionName);
+  const cachedInfo = w.tmuxSessionId ? globalPaneInfo.get(w.tmuxSessionId) : [...globalPaneInfo.values()].find(info => info.sessionName === w.sessionName);
   const currentCwd = cachedInfo ? cachedInfo.cwd : w.cwd;
   const currentPaneCmd = cachedInfo ? cachedInfo.paneCmd : w.lastPaneCommand;
+  if (cachedInfo) {
+    if (!w.tmuxSessionId && cachedInfo.sessionId) {
+      w.tmuxSessionId = cachedInfo.sessionId;
+    }
+    if (cachedInfo.sessionName && cachedInfo.sessionName !== w.sessionName) {
+      w.sessionName = cachedInfo.sessionName;
+      broadcast({ type: "sessionName", id, sessionName: w.sessionName });
+    }
+  }
   if (currentCwd && currentCwd !== w.cwd) {
     w.cwd = currentCwd;
     broadcast({ type: "cwd", id, cwd: currentCwd });
@@ -550,8 +563,8 @@ function sendInput(id, text) {
   }
   const lines = text.split("\n");
   for (const line of lines) {
-    tmuxExec("send-keys", "-t", w.sessionName, line, "");
-    tmuxExec("send-keys", "-t", w.sessionName, "", "Enter");
+    tmuxExec("send-keys", "-t", getTmuxTarget(w), line, "");
+    tmuxExec("send-keys", "-t", getTmuxTarget(w), "", "Enter");
   }
   rememberAction(w, "input", "text");
   broadcast({ type: "log", id, src: "stdin", text, ts: Date.now() });
@@ -564,7 +577,7 @@ function killWorker(id, reason) {
   if (w.pollTimer) clearInterval(w.pollTimer);
   w.pollTimer = null;
   rememberAction(w, "stop_button", "kill-session");
-  tmuxExec("kill-session", "-t", w.sessionName);
+  tmuxExec("kill-session", "-t", getTmuxTarget(w));
   w.status = 'stopped';
   w.aiState = null;
   sessionStateManager.setWaitingState(w, "disconnected");
@@ -701,7 +714,7 @@ const server = http.createServer(async (req, res) => {
       id,
       cwd: w.cwd,
       cmd: w.cmd || "claude",
-      status: (w.status === "completed" || w.status === "stopped") ? w.status : (isAlive(w.sessionName) ? "running" : (w.status || "stopped")),
+      status: (w.status === "completed" || w.status === "stopped") ? w.status : (isAlive(getTmuxTarget(w)) ? "running" : (w.status || "stopped")),
       sessionName: w.sessionName,
       logs: w.logs,
       aiState: w.aiState || null,
@@ -713,14 +726,19 @@ const server = http.createServer(async (req, res) => {
   }
 
   if (method === "GET" && url === "/api/scan") {
-    const raw = tmuxExec("ls", "-F", "#{session_name}|#{pane_current_path}");
+    const raw = tmuxExec("ls", "-F", "#{session_name}|#{pane_current_path}|#{session_id}");
+    const existingIds = new Set([...workers.values()].map(w => w.tmuxSessionId).filter(Boolean));
     const existingNames = new Set([...workers.values()].map(w => w.sessionName));
     const found = [];
     for (const line of raw.trim().split("\n")) {
       if (!line) continue;
-      const [sessionName, cwd] = line.split("|");
+      const parts = line.split("|");
+      const sessionName = parts[0];
+      const cwd = parts[1] || "unknown";
+      const sessionId = parts[2] ? parts[2].trim() : null;
       if (existingNames.has(sessionName)) continue;
-      found.push({ sessionName, cwd: cwd || "unknown" });
+      if (sessionId && existingIds.has(sessionId)) continue;
+      found.push({ sessionName, cwd });
     }
     return json(res, 200, found);
   }
@@ -736,12 +754,14 @@ const server = http.createServer(async (req, res) => {
       return json(res, 400, { error: "invalid sessionName" });
     }
     const cwd = body.cwd;
-    // Guard: if a worker already tracks this sessionName, return its existing id
+    const tmuxSessionId = resolveSessionId(sessionName);
+    // Guard: if a worker already tracks this tmuxSessionId or sessionName, return its existing id
     // to prevent duplicate tabs polling the same tmux pane.
-    const existingEntry = [...workers.entries()].find(([, w]) => w.sessionName === sessionName);
+    const existingEntry = [...workers.entries()].find(([, w]) => 
+      (tmuxSessionId && w.tmuxSessionId === tmuxSessionId) || w.sessionName === sessionName
+    );
     if (existingEntry) return json(res, 200, { id: existingEntry[0] });
     const id = String(nextId++);
-    const tmuxSessionId = resolveSessionId(sessionName);
     workers.set(id, {
       sessionName,
       cwd,
@@ -819,7 +839,7 @@ const server = http.createServer(async (req, res) => {
         broadcastMonitorMeta(id);
       }
       rememberAction(w, "special_key", key);
-      tmuxExec("send-keys", "-t", w.sessionName, String(key));
+      tmuxExec("send-keys", "-t", getTmuxTarget(w), String(key));
     }
     return json(res, 200, { ok: true });
   }
@@ -830,7 +850,7 @@ const server = http.createServer(async (req, res) => {
     const { id } = body;
     const w = workers.get(id);
     if (!w) return json(res, 404, { ok: false });
-    if (isAlive(w.sessionName)) {
+    if (isAlive(getTmuxTarget(w))) {
       if (w.pollTimer) clearInterval(w.pollTimer);
       w.status = "running";
       w.aiState = null;
@@ -851,7 +871,7 @@ const server = http.createServer(async (req, res) => {
     const { id } = body;
     const w = workers.get(id);
     if (!w) return json(res, 404, { ok: false });
-    if (isAlive(w.sessionName)) {
+    if (isAlive(getTmuxTarget(w))) {
       if (w.pollTimer) clearInterval(w.pollTimer);
       
       // 1. Remove session from sessionStateManager snapshot on disk

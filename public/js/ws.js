@@ -31,6 +31,13 @@ function handleMsg(d) {
   if (d.type === 'aiState') updateAIState(d.id, d.state);
   if (d.type === 'monitorMeta') updateMonitorMeta(d.id, d);
   if (d.type === 'sessionAttached') updateSessionAttached(d.id, d.attached);
+  if (d.type === 'sessionName') {
+    const tab = document.querySelector('.tab[data-id="' + d.id + '"]');
+    if (tab) {
+      tab.dataset.sessionName = d.sessionName;
+      if (typeof renderTitle === 'function') renderTitle(d.id);
+    }
+  }
   if (d.type === 'snapshot') {
     const box = document.getElementById('logs-' + d.id);
     if (box) {
@@ -144,8 +151,13 @@ function loadAll() {
         restoreTabOrder();
       }
       const savedTab = localStorage.getItem('nextmux.activeTab.v1');
-      if (savedTab && document.querySelector('.tab[data-id="' + savedTab + '"]')) {
+      if (savedTab && !closedTabs.has(savedTab) && document.querySelector('.tab[data-id="' + savedTab + '"]:not(.closed)')) {
         selectTab(savedTab);
+      } else {
+        const visibleTabs = Array.from(document.querySelectorAll('.tab:not(.closed)'));
+        if (visibleTabs.length > 0) {
+          selectTab(visibleTabs[0].dataset.id);
+        }
       }
     });
 }

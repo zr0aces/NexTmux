@@ -3,6 +3,69 @@
 let layout = localStorage.getItem('layout') || 'tab';
 let activeTab = null;
 
+// Per-tab visibility status: Set of worker IDs that are closed in UI view
+let closedTabs = new Set();
+try {
+  closedTabs = new Set(JSON.parse(localStorage.getItem('nextmux.closedTabs.v1') || '[]'));
+} catch (e) {
+  closedTabs = new Set();
+}
+
+function saveClosedTabs() {
+  localStorage.setItem('nextmux.closedTabs.v1', JSON.stringify(Array.from(closedTabs)));
+}
+
+function closeTab(id) {
+  closedTabs.add(id);
+  saveClosedTabs();
+
+  const tab = document.querySelector('.tab[data-id="' + id + '"]');
+  const panel = document.querySelector('.tab-panel[data-id="' + id + '"]');
+  if (tab) tab.classList.add('closed');
+  if (panel) panel.classList.add('closed');
+
+  // Update split grid layout if in split mode
+  if (typeof updateSplitGrid === 'function') {
+    updateSplitGrid();
+  }
+
+  // If the closed tab was the active tab, we need to select another tab
+  if (activeTab === id) {
+    const visibleTabs = Array.from(document.querySelectorAll('.tab:not(.closed)'));
+    if (visibleTabs.length > 0) {
+      selectTab(visibleTabs[0].dataset.id);
+    } else {
+      activeTab = null;
+      localStorage.removeItem('nextmux.activeTab.v1');
+    }
+  }
+
+  // Send terminal resize to active panel(s)
+  if (typeof sendResize === 'function') {
+    setTimeout(sendResize, 50);
+  }
+}
+
+function reopenTab(id) {
+  closedTabs.delete(id);
+  saveClosedTabs();
+
+  const tab = document.querySelector('.tab[data-id="' + id + '"]');
+  const panel = document.querySelector('.tab-panel[data-id="' + id + '"]');
+  if (tab) tab.classList.remove('closed');
+  if (panel) panel.classList.remove('closed');
+
+  // Update split grid layout if in split mode
+  if (typeof updateSplitGrid === 'function') {
+    updateSplitGrid();
+  }
+
+  // Send terminal resize to active panel(s)
+  if (typeof sendResize === 'function') {
+    setTimeout(sendResize, 50);
+  }
+}
+
 function getEffectiveLayout() {
   if (window.innerWidth <= 768) {
     return 'tab';
@@ -65,7 +128,7 @@ window.addEventListener('resize', () => {
 
 function updateSplitGrid() {
   const sc = document.getElementById('split-content');
-  const panels = sc.querySelectorAll('.tab-panel');
+  const panels = sc.querySelectorAll('.tab-panel:not(.closed)');
   const n = panels.length;
   if (n === 0) return;
 
@@ -90,9 +153,9 @@ function selectTab(id) {
 }
 
 function switchTab(delta) {
-  const tabs = Array.from(document.querySelectorAll('.tab'));
+  const tabs = Array.from(document.querySelectorAll('.tab:not(.closed)'));
   if (!tabs.length) return;
-  if (!activeTab) {
+  if (!activeTab || !tabs.some(t => t.dataset.id === activeTab)) {
     selectTab(tabs[0].dataset.id);
     return;
   }
@@ -114,7 +177,7 @@ function bindTabDrag(tab) {
 }
 
 function getDragAfterElement(container, x) {
-  const els = [...container.querySelectorAll('.tab:not(.dragging)')];
+  const els = [...container.querySelectorAll('.tab:not(.dragging):not(.closed)')];
   let closest = { offset: Number.NEGATIVE_INFINITY, element: null };
   els.forEach(el => {
     const box = el.getBoundingClientRect();
