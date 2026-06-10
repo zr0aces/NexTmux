@@ -657,7 +657,12 @@ const server = http.createServer(async (req, res) => {
 
   if (method === "GET" && url === "/") {
     res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
-    return res.end(indexHtml);
+    try {
+      const liveHtml = await fs.promises.readFile(path.join(__dirname, "index.html"));
+      return res.end(liveHtml);
+    } catch {
+      return res.end(indexHtml);
+    }
   }
 
   const MIME = { ".css": "text/css", ".js": "application/javascript" };
@@ -670,11 +675,9 @@ const server = http.createServer(async (req, res) => {
       try {
         const stat = await fs.promises.stat(filePath);
         if (stat.isFile()) {
-          if (!staticCache.has(filePath)) {
-            staticCache.set(filePath, await fs.promises.readFile(filePath));
-          }
+          const fileContent = await fs.promises.readFile(filePath);
           res.writeHead(200, { "Content-Type": MIME[ext] + "; charset=utf-8" });
-          return res.end(staticCache.get(filePath));
+          return res.end(fileContent);
         }
       } catch (err) {
         // Fall through to 404
