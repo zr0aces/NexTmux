@@ -53,3 +53,22 @@ state/
 states/
 session-state.json
 session.db
+
+# Agent memory and rules
+AGENT.md
+CLAUDE.md
+.agent/
+.claude/
+.agents/
+.agent-mem/
+.cursor/
+.cursorrules
+.windsurf/
+.windsurfrules
+.cline/
+.clinerules
+.roo/
+.gemini/
+.brainsync/
+cache/
+graphify-out/
