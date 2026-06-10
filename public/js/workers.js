@@ -52,18 +52,16 @@ function renderTitle(id, cwd, cmd) {
   const tab = document.querySelector('.tab[data-id="' + id + '"]');
   const tabCwd = cwd || (tab && tab.dataset.cwd) || '';
   const tabCmd = cmd || (tab && tab.dataset.cmd) || '';
-  const sName = (tab && tab.dataset.sessionName) || id;
+  const sName = (tab && tab.dataset.sessionName) || '';
+  const displayName = sName || ('worker-' + id);
   const folder = tabCwd.replace(/\/$/, '').split('/').pop() || tabCwd;
   let text = '';
   if (customTitles[sName]) {
-    text = '#' + id + ' ' + customTitles[sName];
+    text = customTitles[sName];
   } else {
-    const parts = ['#' + id];
-    if (tabCmd) parts.push(tabCmd);
-    if (folder) parts.push(folder);
-    text = tabCmd && folder ? '#' + id + ' ' + tabCmd + ' · ' + folder
-         : tabCmd ? '#' + id + ' ' + tabCmd
-         : '#' + id + ' · ' + folder;
+    text = tabCmd && folder ? displayName + ' · ' + tabCmd + ' · ' + folder
+         : tabCmd ? displayName + ' · ' + tabCmd
+         : displayName + ' · ' + folder;
   }
   const elLabel = document.getElementById('tab-label-' + id);
   if (elLabel) elLabel.textContent = text;
@@ -85,10 +83,18 @@ function ensureCard(id, cwd, status, logs, cmd, reason, monitorMeta) {
   const card = document.createElement('div');
   card.className = 'card';
   card.id = 'card-' + id;
+
+  const sName = (monitorMeta && monitorMeta.sessionName) || '';
+  const displayName = sName || ('worker-' + id);
+  const folder = cwd.replace(/\/$/, '').split('/').pop() || cwd;
+  const initialTabText = cmdLabel && folder ? displayName + ' · ' + cmdLabel + ' · ' + folder
+                       : cmdLabel ? displayName + ' · ' + cmdLabel
+                       : displayName + ' · ' + folder;
+
   card.innerHTML =
     '<div class="card-header">' +
       '<div class="card-title-wrap">' +
-        '<span class="card-title" id="card-title-' + id + '">#' + id + ' ' + escapeHtml(cmdLabel) + '</span>' +
+        '<span class="card-title" id="card-title-' + id + '">' + escapeHtml(initialTabText) + '</span>' +
         '<span class="card-cwd" id="card-cwd-' + id + '" title="' + escapeHtml(cwd) + '">' + escapeHtml(displayPath(cwd)) + '</span>' +
       '</div>' +
         '<div class="card-actions">' +
@@ -157,7 +163,12 @@ function ensureCard(id, cwd, status, logs, cmd, reason, monitorMeta) {
   tab.dataset.cmd = cmdLabel;
   if (monitorMeta && monitorMeta.sessionName) tab.dataset.sessionName = monitorMeta.sessionName;
   var folder = cwd.replace(/\/$/, '').split('/').pop() || cwd;
-  tab.innerHTML = '<span class="tab-dot' + (status === 'stopped' ? ' stopped' : '') + (status === 'completed' ? ' completed' : '') + '" id="tab-dot-' + id + '"></span><span class="tab-label" id="tab-label-' + id + '">#' + id + ' ' + escapeHtml(cmd || '') + (folder ? ' · ' + escapeHtml(folder) : '') + '</span><span class="tab-close" id="tab-close-' + id + '" title="Close Tab">&times;</span>';
+
+  const currentSessionName = (monitorMeta && monitorMeta.sessionName) || '';
+  const currentDisplayName = currentSessionName || ('worker-' + id);
+  const currentTabText = cmdLabel ? currentDisplayName + ' · ' + cmdLabel + (folder ? ' · ' + folder : '') : currentDisplayName + (folder ? ' · ' + folder : '');
+
+  tab.innerHTML = '<span class="tab-dot' + (status === 'stopped' ? ' stopped' : '') + (status === 'completed' ? ' completed' : '') + '" id="tab-dot-' + id + '"></span><span class="tab-label" id="tab-label-' + id + '">' + escapeHtml(currentTabText) + '</span><span class="tab-close" id="tab-close-' + id + '" title="Close Tab">&times;</span>';
   tab.addEventListener('click', e => {
     if (e.target.classList.contains('tab-close')) return;
     selectTab(id);

@@ -1753,19 +1753,25 @@ header h1 {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 14px;
-  height: 14px;
+  width: 16px;
+  height: 16px;
   border-radius: 50%;
-  font-size: 10px;
+  font-size: 12px;
   line-height: 1;
   color: var(--text-secondary);
-  transition: all 0.2s ease;
-  margin-left: 2px;
+  transition: all 0.15s ease;
+  margin-left: 6px;
+  opacity: 0.7;
+  cursor: pointer;
+}
+
+.tab:hover .tab-close {
+  opacity: 1;
 }
 
 .tab-close:hover {
-  background: rgba(255, 255, 255, 0.15);
-  color: #f85149;
+  background: rgba(248, 81, 73, 0.2);
+  color: #ff6b6b !important;
 }
 
 /* Tab and panel hiding styles for Closed Tabs */
