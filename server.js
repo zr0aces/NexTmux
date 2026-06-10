@@ -562,9 +562,11 @@ function sendInput(id, text) {
     broadcastMonitorMeta(id);
   }
   const lines = text.split("\n");
+  if (lines.length > 1 && lines[lines.length - 1] === "") {
+    lines.pop();
+  }
   for (const line of lines) {
-    tmuxExec("send-keys", "-t", getTmuxTarget(w), line, "");
-    tmuxExec("send-keys", "-t", getTmuxTarget(w), "", "Enter");
+    tmuxExec("send-keys", "-t", getTmuxTarget(w), line, "Enter");
   }
   rememberAction(w, "input", "text");
   broadcast({ type: "log", id, src: "stdin", text, ts: Date.now() });
@@ -988,13 +990,18 @@ const server = http.createServer(async (req, res) => {
         const status = await gitExecAsync(cwd, ['status', '--porcelain']);
         const files = status.trim().split('\n').filter(Boolean).map(line => {
           const xy = line.substring(0, 2).trim();
-          const filePath = line.substring(3);
+          let filePath = line.substring(3);
           // Status mapping: M=modified, A=added, D=deleted, ?=untracked (new), R=renamed
           let s = 'M';
           if (xy === '??') s = 'A';
           else if (xy.includes('D')) s = 'D';
           else if (xy.includes('A')) s = 'A';
-          else if (xy.includes('R')) s = 'R';
+          else if (xy.includes('R')) {
+            s = 'R';
+            if (filePath.includes(" -> ")) {
+              filePath = filePath.split(" -> ").pop().trim().replace(/^"(.*)"$/, '$1');
+            }
+          }
           return { status: s, path: filePath };
         });
 

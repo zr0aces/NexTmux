@@ -162,7 +162,6 @@ function ensureCard(id, cwd, status, logs, cmd, reason, monitorMeta) {
   tab.dataset.cwd = cwd;
   tab.dataset.cmd = cmdLabel;
   if (monitorMeta && monitorMeta.sessionName) tab.dataset.sessionName = monitorMeta.sessionName;
-  var folder = cwd.replace(/\/$/, '').split('/').pop() || cwd;
 
   const currentSessionName = (monitorMeta && monitorMeta.sessionName) || '';
   const currentDisplayName = currentSessionName || ('worker-' + id);
@@ -690,6 +689,8 @@ function scanSessions() {
       const closedCount = document.querySelectorAll('.tab.closed').length;
       if (closedCount > 0) {
         showScanModal([]);
+      } else {
+        alert('Failed to scan tmux sessions. Please check if the server is running and you are authenticated.');
       }
     });
 }
