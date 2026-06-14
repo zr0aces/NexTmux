@@ -26,6 +26,11 @@ const {
 
 
 const PORT = process.env.PORT || 8081;
+const versionPath = path.join(__dirname, "VERSION");
+let APP_VERSION = "2026.6.7";
+if (fs.existsSync(versionPath)) {
+  APP_VERSION = fs.readFileSync(versionPath, "utf8").trim();
+}
 const PASSWORD = process.env.DASHBOARD_PASSWORD || "changeme";
 const DISCORD_WEBHOOK = process.env.DISCORD_WEBHOOK;
 const ENABLE_TUNNEL_HEALTHCHECK = process.env.ENABLE_TUNNEL_HEALTHCHECK === "1";
@@ -634,6 +639,7 @@ const server = http.createServer(async (req, res) => {
     res.setHeader("X-Content-Type-Options", "nosniff");
     res.setHeader("X-Frame-Options", "DENY");
     res.setHeader("Referrer-Policy", "no-referrer-when-downgrade");
+    res.setHeader("X-App-Version", APP_VERSION);
 
     const { method } = req;
     const url = req.url.split("?")[0];

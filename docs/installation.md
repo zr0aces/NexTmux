@@ -7,9 +7,9 @@ This document provides in-depth, environment-specific setup instructions and adv
 ## Prerequisites
 
 Before setting up NexTmux, ensure your system has:
-- [Node.js](https://nodejs.org) 22+
-- [tmux](https://github.com/tmux/tmux)
-- Optional for remote access: [cloudflared](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/)
+- **Node.js** 22.0.0+ (utilizes Node's native test runner and modern HTTP/crypto APIs)
+- **tmux** 3.0+ (must be available in the system's `PATH`)
+- **cloudflared** (Optional, required only if you enable public secure tunnels for WAN/remote access; must be in `PATH`)
 
 ---
 

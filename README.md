@@ -124,12 +124,11 @@ Open your browser at **`http://localhost:8081`** to log in!
 
 Detailed deployment guides and configurations have been moved to the [docs/](docs/) directory:
 
-* **[Installation & Deployment Guide](docs/installation.md)** — Step-by-step setup guides for macOS daemon (`launchd`), Ubuntu/Debian services, Docker Compose setups, and Cloudflare Secure Tunnels.
-* **[User Guide & Dashboard Usage](docs/usage.md)** — Learn how to log in, scan/attach existing sessions, leverage bidirectional mirroring, and interact with the virtual mechanical keyboard.
+* **[Installation & Deployment Guide](docs/installation.md)** — System prerequisites, step-by-step setup guides for macOS daemon (`launchd`), Ubuntu/Debian services, Docker Compose setups, and Cloudflare Secure Tunnels.
+* **[User Guide & Dashboard Usage](docs/usage.md)** — Interactive user workflows, login, scanning and attaching existing sessions, leveraging bidirectional mirroring, and the virtual keyboard toolkit.
 * **[AI State Monitoring & Alerts Setup](docs/ai_monitoring.md)** — Setup guide for configuring Telegram outbound alerts, tuning idle thresholds, and modifying regex patterns.
-* **[Technical Specification](docs/technical_spec.md)** — In-depth architectural details, client-server data flows, security mechanisms, and core capability implementations of NexTmux.
-* **[Technical Requirements](docs/technical_requirements.md)** — Prerequisites, system requirements, network ports, permissions, and browser compatibility checklists.
-* **[User & Functional Requirements](docs/user_requirements.md)** — Core user workflows when starting projects and a comprehensive workspace feature catalog.
+* **[Technical Specification](docs/technical_spec.md)** — In-depth architectural details, security models, system/browser requirements, client-server data flows, and core capability implementations.
+* **[Developer Guide](docs/development.md)** — Core command references for setup, run, test, and versioning.
 
 ---
 

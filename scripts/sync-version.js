@@ -3,6 +3,7 @@ const path = require('path');
 
 // Paths
 const rootDir = path.join(__dirname, '..');
+const versionPath = path.join(rootDir, 'VERSION');
 const packageJsonPath = path.join(rootDir, 'package.json');
 const packageLockJsonPath = path.join(rootDir, 'package-lock.json');
 const indexHtmlPath = path.join(rootDir, 'index.html');
@@ -26,17 +27,18 @@ if (version) {
   const currentYear = today.getFullYear();
   const currentMonth = today.getMonth() + 1; // 1-indexed (e.g., 5 for May)
 
-  if (!fs.existsSync(packageJsonPath)) {
-    console.error('❌ Error: package.json not found to read current version');
-    process.exit(1);
+  let currentVersion = '2026.5.0';
+  if (fs.existsSync(versionPath)) {
+    currentVersion = fs.readFileSync(versionPath, 'utf8').trim();
+  } else if (fs.existsSync(packageJsonPath)) {
+    const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf8'));
+    currentVersion = packageJson.version || '2026.5.0';
   }
 
-  const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf8'));
-  const currentVersion = packageJson.version || '2026.5.0';
   const parts = currentVersion.split('.');
   
   if (parts.length !== 3) {
-    console.error(`❌ Error: Current version "${currentVersion}" inside package.json is not in CalVer YYYY.M.Micro format`);
+    console.error(`❌ Error: Current version "${currentVersion}" is not in CalVer YYYY.M.Micro format`);
     process.exit(1);
   }
 
@@ -61,6 +63,10 @@ if (version) {
 }
 
 console.log(`🔄 Syncing version: v${version}`);
+
+// 0. Sync VERSION
+fs.writeFileSync(versionPath, version + '\n', 'utf8');
+console.log('✅ Updated VERSION');
 
 // 1. Sync package.json
 if (fs.existsSync(packageJsonPath)) {

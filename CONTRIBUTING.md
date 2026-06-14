@@ -30,13 +30,17 @@ npm start
 
 ## Testing
 
-This project does not have an automated test suite yet.
+Run the automated test suite before submitting pull requests:
 
-- Validate core flows manually:
-  - spawn a new session
-  - attach an existing tmux session
-  - switch Tab/Split layout
-  - stop and remove workers
+```bash
+npm test
+```
+
+Also validate core flows manually:
+- Spawn a new session
+- Attach an existing tmux session
+- Switch Tab/Split layout
+- Stop and remove workers
 - Include your manual test steps in the PR description.
 
 ## Code of conduct

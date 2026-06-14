@@ -6,6 +6,20 @@ This guide walks you through logging in, starting session workers, utilizing tmu
 
 ## 🚀 Quick Start Guide
 
+### User Workflow
+
+```mermaid
+graph TD
+    Login[1. Authenticate via Password] --> OpenApp[2. Access Main Dashboard]
+    OpenApp --> ClickNew[3. Click New Session +]
+    ClickNew --> SelectPath[4. Choose Working Directory]
+    SelectPath -->|Type Custom Path| InputCmd[5. Specify Command/CLI]
+    SelectPath -->|Select Favorite Path| InputCmd
+    SelectPath -->|Select Recent Path| InputCmd
+    InputCmd --> Launch[6. Launch Worker Session]
+    Launch --> Monitor[7. Monitor Real-Time Logs & AI state]
+```
+
 ### Step 1: Log in to the Web UI
 1. Ensure the server is active (`npm start` or via background daemon).
 2. Open your browser and navigate to: **`http://localhost:8081`**

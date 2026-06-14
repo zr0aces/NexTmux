@@ -247,10 +247,26 @@ NexTmux implements several security measures to protect the host system:
 * **Input Sanitization**: Session arguments, CWD targets, and terminal keys are executed using `execFileSync` (passing arguments in a structured string array) rather than standard shell strings to prevent command injections. Session names are checked against `^[a-zA-Z0-9_:-]+$`.
 * **Path Traversal Protection**: REST API file lookups (like `/api/git-diff`) check parameters to ensure paths do not contain parent directory markers (`..`).
 * **WebCrypto Password Encryption**: Remembered password credentials are encrypted in IndexedDB using AES-GCM 256. Cryptographic keys are generated and held within a secure database store, preventing simple extraction from plain localStorage dumps.
+* **Subprocess & File Permissions**: The Node.js process runs as the system user and must have permissions to execute child processes (`child_process.execSync`, `spawn`, `execFileSync`) to invoke `tmux` and `git`. Read & write access is required for the NexTmux root folder, the `state/` directory (for `session-state.json`), and any working directory specified when spawning new worker sessions.
 
 ---
 
-## 6. Installation & Deployment Configurations
+## 6. Environment & Client Prerequisites
+
+### 6.1 Host OS & Network Port Bindings
+* **Operating System Compatibility**: POSIX-compatible host operating systems where native `tmux` is supported (Linux, macOS, or Windows via WSL). Native Windows CMD/PowerShell environments are not supported.
+* **Network Port Bindings**: Requires permission to bind to a local TCP port (default is 8081). Firewalls or proxies must allow full-duplex WebSocket connections (`ws://` / `wss://`).
+* **Outbound Connections**: Requires outbound HTTP requests to `api.telegram.org` (for Telegram alerts), `discord.com` (for Discord alerts), and outbound TCP connectivity for the Cloudflare tunnel client to establish connections with Cloudflare edge servers (`*.trycloudflare.com`).
+
+### 6.2 Client Web Browser Prerequisites
+Modern standards-compliant web browsers require the following features enabled:
+* **Secure Context**: Must be accessed via localhost/127.0.0.1 or over an encrypted HTTPS connection.
+* **WebCrypto API & IndexedDB**: Required to securely generate and store client-side cryptographic keys for password decryption (the Remember Password feature).
+* **WebSockets**: Standard WebSocket client support.
+
+---
+
+## 7. Installation & Deployment Configurations
 
 NexTmux supports three principal deployment models.
 

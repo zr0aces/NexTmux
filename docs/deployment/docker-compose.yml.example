@@ -1,0 +1,29 @@
+version: "3.9"
+
+services:
+  nextmux:
+    image: node:22-bookworm
+    working_dir: /app
+    env_file:
+      - .env
+    environment:
+      ENABLE_TUNNEL: ${ENABLE_TUNNEL:-0}
+      AI_MONITOR_ENABLED: ${AI_MONITOR_ENABLED:-1}
+      AI_MONITOR_POLL_INTERVAL_MS: ${AI_MONITOR_POLL_INTERVAL_MS:-1000}
+      AI_MONITOR_IDLE_THRESHOLD_MS: ${AI_MONITOR_IDLE_THRESHOLD_MS:-5000}
+      AI_MONITOR_LINES_TO_SCAN: ${AI_MONITOR_LINES_TO_SCAN:-120}
+      AI_MONITOR_NOTIFY_COOLDOWN_MS: ${AI_MONITOR_NOTIFY_COOLDOWN_MS:-120000}
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID:-}
+    command: >-
+      sh -lc "apt-get update &&
+      DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends tmux &&
+      npm install &&
+      node server.js"
+    ports:
+      - "8081:8081"
+    volumes:
+      - ./:/app
+      - ./state:/app/state
+      - /tmp:/tmp
+    restart: unless-stopped
