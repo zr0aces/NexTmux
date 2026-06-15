@@ -73,9 +73,17 @@
     return Math.round(n);
   }
 
+  // Regex matches:
+  //  group 1+2 → CSI sequence:  ESC [ <params> <final-byte>
+  //  group 3   → OSC sequence:  ESC ] <data> (BEL or ST terminator)
+  //  group 4   → any other ESC + single char
+  var RE = /\x1b(?:\[([0-9;:<=>?]*)([A-Za-z@`])|\]([^\x07\x1b]*)(?:\x07|\x1b\\)|(.))/g;
+
   // Main converter
   function ansiToHtml(raw) {
     if (!raw) return '';
+
+    RE.lastIndex = 0; // Reset stateful global regexp index
 
     // Current SGR state
     var fg = null, bg = null;
@@ -83,12 +91,6 @@
     var under = false, strike = false, blink = false;
 
     var out = '';
-
-    // Regex matches:
-    //  group 1+2 → CSI sequence:  ESC [ <params> <final-byte>
-    //  group 3   → OSC sequence:  ESC ] <data> (BEL or ST terminator)
-    //  group 4   → any other ESC + single char
-    var RE = /\x1b(?:\[([0-9;:<=>?]*)([A-Za-z@`])|\]([^\x07\x1b]*)(?:\x07|\x1b\\)|(.))/g;
     var last = 0;
     var m;
 

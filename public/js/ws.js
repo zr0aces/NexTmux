@@ -46,13 +46,16 @@ function handleMsg(d) {
       var shouldAutoScroll = typeof isAutoScrollEnabled === 'function'
         ? isAutoScrollEnabled(box)
         : isNearBottom(box);
-      box.innerHTML = '';
-      d.lines.forEach(text => {
-        const line = document.createElement('div');
-        line.className = 'log-line stdout';
-        line.innerHTML = (typeof ansiToHtml === 'function') ? ansiToHtml(text) : text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-        box.appendChild(line);
-      });
+      
+      var html = '';
+      var linesLen = d.lines.length;
+      for (var i = 0; i < linesLen; i++) {
+        var text = d.lines[i];
+        var content = (typeof ansiToHtml === 'function') ? ansiToHtml(text) : text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        html += '<div class="log-line stdout">' + content + '</div>';
+      }
+      box.innerHTML = html;
+
       if (shouldAutoScroll) box.scrollTop = box.scrollHeight;
     }
   }
@@ -142,7 +145,11 @@ function apiGet(url) {
 function loadAll() {
   apiGet('/api/workers')
     .then(list => {
-      const serverIds = new Set(list.map(w => String(w.id)));
+      const serverIds = new Set();
+      const listLen = list.length;
+      for (let i = 0; i < listLen; i++) {
+        serverIds.add(String(list[i].id));
+      }
 
       // Prune client DOM tabs/panels whose worker IDs are no longer in the server list
       document.querySelectorAll('.tab').forEach(tab => {
