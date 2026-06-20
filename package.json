@@ -7,7 +7,7 @@
     "node": ">=22"
   },
   "name": "nextmux",
-  "version": "2026.6.8",
+  "version": "2026.6.9",
   "main": "index.js",
   "scripts": {
     "start": "node server.js",
