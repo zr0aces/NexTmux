@@ -107,7 +107,7 @@ if (fs.existsSync(indexHtmlPath)) {
 console.log(`🎉 Version sync complete! Version is now v${version}`);
 
 console.log(`\n🏷️  To update git tags for this release, run:`);
-console.log(`   git add package.json package-lock.json index.html`);
+console.log(`   git add VERSION package.json package-lock.json index.html`);
 console.log(`   git commit -m "chore: bump version to v${version}"`);
 console.log(`   git tag -a v${version} -m "Release v${version}"`);
 console.log(`   git push origin v${version}`);
