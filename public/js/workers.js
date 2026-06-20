@@ -1,15 +1,5 @@
 // ── Worker Card UI ──
 
-// HTML escaping configuration and regex (hoisted to file scope)
-const htmlEscapes = {
-  '&': '&amp;',
-  '<': '&lt;',
-  '>': '&gt;',
-  '"': '&quot;',
-  "'": '&#39;'
-};
-const htmlEscapeRegex = /[&<>"']/g;
-
 // Per-tab command input history: id → { entries: string[], cursor: number }
 const inputHistory = new Map();
 
@@ -50,9 +40,7 @@ function trimTitle(text) {
 }
 
 function escapeHtml(text) {
-  return String(text).replace(htmlEscapeRegex, function(char) {
-    return htmlEscapes[char];
-  });
+  return String(text).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 }
 
 function renderTitle(id, cwd, cmd) {
