@@ -345,14 +345,12 @@ async function resizeWorker(id, cols, rows) {
   const c = cols || 80;
   const r = rows || 50;
 
-  if (c === w._lastCols && r === w._lastRows) {
-    return;
+  if (c !== w._lastCols || r !== w._lastRows) {
+    tmuxExec("resize-pane", "-t", getTmuxTarget(w), "-x", String(c), "-y", String(r));
+    tmuxExec("resize-window", "-t", getTmuxTarget(w), "-x", String(c), "-y", String(r));
+    w._lastCols = c;
+    w._lastRows = r;
   }
-
-  tmuxExec("resize-pane", "-t", getTmuxTarget(w), "-x", String(c), "-y", String(r));
-  tmuxExec("resize-window", "-t", getTmuxTarget(w), "-x", String(c), "-y", String(r));
-  w._lastCols = c;
-  w._lastRows = r;
 
   try {
     const output = await tmuxExecAsync("capture-pane", "-t", getTmuxTarget(w), "-p", "-S", "-500", "-J");

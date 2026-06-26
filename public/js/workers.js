@@ -661,6 +661,8 @@ function resetDisplay(id) {
     box.style.height = '';
     box.style.width = '';
     box.dataset.scrollLock = '0';
+    delete box.dataset.lastWidth;
+    delete box.dataset.lastHeight;
     box.scrollTop = box.scrollHeight;
   }
   if (typeof sendResize === 'function') {
