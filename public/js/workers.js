@@ -111,6 +111,7 @@ function ensureCard(id, cwd, status, logs, cmd, reason, monitorMeta) {
         '</div>' +
         '<button class="diff-btn" id="diff-' + id + '" title="Git Diff">Diff</button>' +
         '<button class="reset-btn" id="reset-' + id + '" title="Reset State & Re-catch Session">Reset</button>' +
+        '<button class="reset-display-btn" id="reset-display-' + id + '" title="Reset terminal display height & recalculate size">Reset Display</button>' +
         killBtnHtml(id, status) +
       '</div>' +
     '</div>' +
@@ -216,6 +217,8 @@ function ensureCard(id, cwd, status, logs, cmd, reason, monitorMeta) {
     if (el) el.style.display = 'none';
     const resetBtn = document.getElementById('reset-' + id);
     if (resetBtn) resetBtn.style.display = 'none';
+    const resetDisplayBtn = document.getElementById('reset-display-' + id);
+    if (resetDisplayBtn) resetDisplayBtn.style.display = 'none';
   }
 
   renderTitle(id, cwd, cmdLabel);
@@ -250,6 +253,14 @@ function bindCard(id, root) {
 
   const resetBtn = q('#reset-' + id);
   if (resetBtn) resetBtn.addEventListener('click', () => resetWorkerState(id));
+
+  const resetDisplayBtn = q('#reset-display-' + id);
+  if (resetDisplayBtn) resetDisplayBtn.addEventListener('click', () => resetDisplay(id));
+
+  const logsBox = q('#logs-' + id);
+  if (logsBox) {
+    logsBox.addEventListener('dblclick', () => resetDisplay(id));
+  }
  
   if (killBtn) killBtn.addEventListener('click', () => killWorker(id));
   if (sendBtn) sendBtn.addEventListener('click', () => sendInput(id));
@@ -424,6 +435,8 @@ function updateStatus(id, status, reason) {
     if (elInputRow) elInputRow.style.display = 'none';
     const resetBtn = document.getElementById('reset-' + id);
     if (resetBtn) resetBtn.style.display = 'none';
+    const resetDisplayBtn = document.getElementById('reset-display-' + id);
+    if (resetDisplayBtn) resetDisplayBtn.style.display = 'none';
   }
   if (status === 'running') {
     updateExitReason(id, null);
@@ -441,6 +454,8 @@ function updateStatus(id, status, reason) {
     if (elInputRow) elInputRow.style.display = '';
     const resetBtn = document.getElementById('reset-' + id);
     if (resetBtn) resetBtn.style.display = '';
+    const resetDisplayBtn = document.getElementById('reset-display-' + id);
+    if (resetDisplayBtn) resetDisplayBtn.style.display = '';
   }
 }
 
@@ -638,6 +653,19 @@ function resetWorkerState(id) {
       }
     })
     .catch(() => { alert('Failed to reset state.'); });
+}
+
+function resetDisplay(id) {
+  const box = document.getElementById('logs-' + id);
+  if (box) {
+    box.style.height = '';
+    box.style.width = '';
+    box.dataset.scrollLock = '0';
+    box.scrollTop = box.scrollHeight;
+  }
+  if (typeof sendResize === 'function') {
+    sendResize();
+  }
 }
 
 function setMonitorMode(id, mode) {

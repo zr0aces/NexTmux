@@ -724,6 +724,7 @@ header h1 {
 .diff-btn,
 .kill-btn,
 .reset-btn,
+.reset-display-btn,
 .monitor-mode-selector {
   height: 24px;
   font-family: var(--font-ui);
@@ -783,6 +784,19 @@ header h1 {
   border-color: var(--accent-primary);
   color: #fff;
   box-shadow: 0 0 8px rgba(59, 130, 246, 0.3);
+}
+
+.reset-display-btn {
+  color: var(--accent-hover);
+  border-color: rgba(96, 165, 250, 0.2);
+  background: rgba(96, 165, 250, 0.04);
+}
+
+.reset-display-btn:hover {
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
+  color: #fff;
+  box-shadow: 0 0 8px rgba(96, 165, 250, 0.3);
 }
 
 /* ── AI Supervision Tooltip ────────────────────────── */
@@ -1660,6 +1674,8 @@ header h1 {
 
   .diff-btn,
   .kill-btn,
+  .reset-btn,
+  .reset-display-btn,
   .monitor-mode-selector {
     height: 28px;
     font-size: 11px;
