@@ -345,12 +345,14 @@ async function resizeWorker(id, cols, rows) {
   const c = cols || 80;
   const r = rows || 50;
 
-  if (c !== w._lastCols || r !== w._lastRows) {
-    tmuxExec("resize-pane", "-t", getTmuxTarget(w), "-x", String(c), "-y", String(r));
-    tmuxExec("resize-window", "-t", getTmuxTarget(w), "-x", String(c), "-y", String(r));
-    w._lastCols = c;
-    w._lastRows = r;
+  if (c === w._lastCols && r === w._lastRows) {
+    return;
   }
+
+  tmuxExec("resize-pane", "-t", getTmuxTarget(w), "-x", String(c), "-y", String(r));
+  tmuxExec("resize-window", "-t", getTmuxTarget(w), "-x", String(c), "-y", String(r));
+  w._lastCols = c;
+  w._lastRows = r;
 
   try {
     const output = await tmuxExecAsync("capture-pane", "-t", getTmuxTarget(w), "-p", "-S", "-500", "-J");
@@ -902,6 +904,8 @@ const server = http.createServer(async (req, res) => {
       w.notifiedMessageHashes = [];
       w.sentNotificationKeys = new Set();
       w.logs = [];
+      w._lastCols = undefined;
+      w._lastRows = undefined;
 
       // 3. Clear cached last capture to force re-reading the whole tmux pane
       lastCapture.delete(id);

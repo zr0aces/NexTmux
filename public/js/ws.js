@@ -110,9 +110,17 @@ if (typeof ResizeObserver !== 'undefined') {
   window.resizeObserver = new ResizeObserver(entries => {
     let shouldResize = false;
     for (const entry of entries) {
-      if (entry.contentRect.width > 0 && entry.contentRect.height > 0) {
-        shouldResize = true;
-        break;
+      const box = entry.target;
+      const w = Math.floor(entry.contentRect.width);
+      const h = Math.floor(entry.contentRect.height);
+      if (w > 0 && h > 0) {
+        const lastW = parseInt(box.dataset.lastWidth, 10);
+        const lastH = parseInt(box.dataset.lastHeight, 10);
+        if (w !== lastW || h !== lastH) {
+          box.dataset.lastWidth = w;
+          box.dataset.lastHeight = h;
+          shouldResize = true;
+        }
       }
     }
     if (shouldResize) {
