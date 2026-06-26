@@ -606,7 +606,6 @@ header h1 {
   overflow: hidden;
   gap: 1px;
   background: var(--border-color);
-  height: 100%;
 }
 
 /* ── Worker Card ───────────────────────────────────── */

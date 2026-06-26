@@ -112,7 +112,7 @@ function setLayout(mode) {
 
   const effLayout = getEffectiveLayout();
   document.getElementById('tab-mode').style.display = effLayout === 'tab' ? 'flex' : 'none';
-  document.getElementById('split-mode').style.display = effLayout === 'split' ? 'block' : 'none';
+  document.getElementById('split-mode').style.display = effLayout === 'split' ? 'flex' : 'none';
   document.getElementById('split-content').style.display = effLayout === 'split' ? 'grid' : 'none';
   document.getElementById('layout-tab-btn').classList.toggle('layout-active', mode === 'tab');
   document.getElementById('layout-split-btn').classList.toggle('layout-active', mode === 'split');
@@ -127,7 +127,7 @@ window.addEventListener('resize', () => {
   const splitModeEl = document.getElementById('split-mode');
   const splitContentEl = document.getElementById('split-content');
   if (tabModeEl) tabModeEl.style.display = effLayout === 'tab' ? 'flex' : 'none';
-  if (splitModeEl) splitModeEl.style.display = effLayout === 'split' ? 'block' : 'none';
+  if (splitModeEl) splitModeEl.style.display = effLayout === 'split' ? 'flex' : 'none';
   if (splitContentEl) splitContentEl.style.display = effLayout === 'split' ? 'grid' : 'none';
   if (typeof scheduleSendResize === 'function') {
     scheduleSendResize();

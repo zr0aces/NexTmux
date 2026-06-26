@@ -345,11 +345,14 @@ async function resizeWorker(id, cols, rows) {
   const c = cols || 80;
   const r = rows || 50;
 
-  if (c !== w._lastCols || r !== w._lastRows) {
-    tmuxExec("resize-pane", "-t", getTmuxTarget(w), "-x", String(c), "-y", String(r));
-    tmuxExec("resize-window", "-t", getTmuxTarget(w), "-x", String(c), "-y", String(r));
-    w._lastCols = c;
-    w._lastRows = r;
+  // Only resize if no terminal client is attached!
+  if (w.sessionAttached !== 1) {
+    if (c !== w._lastCols || r !== w._lastRows) {
+      tmuxExec("resize-pane", "-t", getTmuxTarget(w), "-x", String(c), "-y", String(r));
+      tmuxExec("resize-window", "-t", getTmuxTarget(w), "-x", String(c), "-y", String(r));
+      w._lastCols = c;
+      w._lastRows = r;
+    }
   }
 
   try {
@@ -379,22 +382,48 @@ async function pollOutput(id) {
     broadcastMonitorMeta(id);
     return;
   }
+
+  // Query consolidated global pane info (saves spawning one sub-process per poll)
+  await updateGlobalPaneInfo();
+  const cachedInfo = w.tmuxSessionId ? globalPaneInfo.get(w.tmuxSessionId) : [...globalPaneInfo.values()].find(info => info.sessionName === w.sessionName);
+
+  // Detect and broadcast sessionAttached state changes
+  const nowAttached = cachedInfo?.sessionAttached === "1" ? 1 : 0;
+  if (nowAttached !== (w.sessionAttached || 0)) {
+    const prevAttached = w.sessionAttached || 0;
+    w.sessionAttached = nowAttached;
+    broadcast({ type: "sessionAttached", id, attached: nowAttached === 1 });
+    
+    if (nowAttached === 1) {
+      try {
+        tmuxExec("resize-window", "-A", "-t", getTmuxTarget(w));
+        w._lastCols = undefined;
+        w._lastRows = undefined;
+      } catch (e) {
+        console.error("Failed to run resize-window -A:", e);
+      }
+    } else if (prevAttached === 1 && nowAttached === 0) {
+      w._lastCols = undefined;
+      w._lastRows = undefined;
+    }
+  }
+
   const cols = w.cols || 80;
   const rows = w.rows || 50;
-  // Only resize when dimensions actually changed to avoid unnecessary tmux calls
-  if (cols !== w._lastCols || rows !== w._lastRows) {
-    tmuxExec("resize-pane", "-t", getTmuxTarget(w), "-x", String(cols), "-y", String(rows));
-    tmuxExec("resize-window", "-t", getTmuxTarget(w), "-x", String(cols), "-y", String(rows));
-    w._lastCols = cols;
-    w._lastRows = rows;
+  // Only resize when dimensions actually changed to avoid unnecessary tmux calls,
+  // and only resize if no terminal client is attached!
+  if (w.sessionAttached !== 1) {
+    if (cols !== w._lastCols || rows !== w._lastRows) {
+      tmuxExec("resize-pane", "-t", getTmuxTarget(w), "-x", String(cols), "-y", String(rows));
+      tmuxExec("resize-window", "-t", getTmuxTarget(w), "-x", String(cols), "-y", String(rows));
+      w._lastCols = cols;
+      w._lastRows = rows;
+    }
   }
   const output = await tmuxExecAsync("capture-pane", "-t", getTmuxTarget(w), "-p", "-S", "-500", "-J");
   const newLinesCount = getNewLinesCount(output, lastCapture.get(id));
   w.totalLinesCount = (w.totalLinesCount || 0) + newLinesCount;
 
-  // Query consolidated global pane info (saves spawning one sub-process per poll)
-  await updateGlobalPaneInfo();
-  const cachedInfo = w.tmuxSessionId ? globalPaneInfo.get(w.tmuxSessionId) : [...globalPaneInfo.values()].find(info => info.sessionName === w.sessionName);
   const currentCwd = cachedInfo ? cachedInfo.cwd : w.cwd;
   const currentPaneCmd = cachedInfo ? cachedInfo.paneCmd : w.lastPaneCommand;
   if (cachedInfo) {
@@ -425,13 +454,6 @@ async function pollOutput(id) {
       broadcastMonitorMeta(id);
       return;
     }
-  }
-
-  // Detect and broadcast sessionAttached state changes
-  const nowAttached = cachedInfo?.sessionAttached === "1" ? 1 : 0;
-  if (nowAttached !== (w.sessionAttached || 0)) {
-    w.sessionAttached = nowAttached;
-    broadcast({ type: "sessionAttached", id, attached: nowAttached === 1 });
   }
 
   const now = Date.now();

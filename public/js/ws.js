@@ -121,6 +121,9 @@ if (typeof ResizeObserver !== 'undefined') {
           box.dataset.lastHeight = h;
           shouldResize = true;
         }
+      } else {
+        delete box.dataset.lastWidth;
+        delete box.dataset.lastHeight;
       }
     }
     if (shouldResize) {
