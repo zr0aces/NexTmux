@@ -909,6 +909,10 @@ header h1 {
   letter-spacing: 0;
 }
 
+.logs[style*="height"] {
+  flex: none !important;
+}
+
 .logs::-webkit-scrollbar {
   width: 6px;
   height: 6px;
