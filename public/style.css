@@ -595,6 +595,10 @@ header h1 {
   display: flex;
 }
 
+.tab-panel > .card {
+  flex: 1;
+}
+
 /* Split Mode */
 #split-content {
   flex: 1;
