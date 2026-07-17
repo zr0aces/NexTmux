@@ -109,10 +109,20 @@ function ensureCard(id, cwd, status, logs, cmd, reason, monitorMeta) {
             '<div class="tooltip-line" id="meta-reset-' + id + '" style="display:none">Reset: -</div>' +
           '</div>' +
         '</div>' +
-        '<button class="diff-btn" id="diff-' + id + '" title="Git Diff">Diff</button>' +
-        '<button class="reset-btn" id="reset-' + id + '" title="Reset State & Re-catch Session">Reset</button>' +
-        '<button class="reset-display-btn" id="reset-display-' + id + '" title="Reset terminal display height & recalculate size">Reset Display</button>' +
+        '<button class="diff-btn card-action-overflow" id="diff-' + id + '" title="Git Diff">Diff</button>' +
+        '<button class="reset-btn card-action-overflow" id="reset-' + id + '" title="Reset State & Re-catch Session">Reset</button>' +
+        '<button class="reset-display-btn card-action-overflow" id="reset-display-' + id + '" title="Reset terminal display height & recalculate size">Reset Display</button>' +
         killBtnHtml(id, status) +
+        '<button class="more-actions-btn" id="more-' + id + '" title="More actions" aria-label="More actions">⋯</button>' +
+      '</div>' +
+      '<div class="more-actions-drawer" id="more-drawer-' + id + '" role="menu" aria-label="More actions">' +
+        '<div class="more-drawer-backdrop"></div>' +
+        '<div class="more-drawer-sheet">' +
+          '<div class="more-drawer-handle"></div>' +
+          '<button class="more-drawer-item" id="drawer-diff-' + id + '">📂 Git Diff</button>' +
+          '<button class="more-drawer-item" id="drawer-reset-' + id + '">🔄 Reset State</button>' +
+          '<button class="more-drawer-item" id="drawer-reset-display-' + id + '">📐 Reset Display</button>' +
+        '</div>' +
       '</div>' +
     '</div>' +
     '<div class="exit-reason" id="exit-reason-' + id + '"></div>' +
@@ -261,7 +271,26 @@ function bindCard(id, root) {
   if (logsBox) {
     logsBox.addEventListener('dblclick', () => resetDisplay(id));
   }
- 
+
+  // ── More-actions drawer (mobile) ──
+  const moreBtn = q('#more-' + id);
+  const drawer = q('#more-drawer-' + id);
+  if (moreBtn && drawer) {
+    const backdrop = drawer.querySelector('.more-drawer-backdrop');
+    const closeDrawer = () => drawer.classList.remove('open');
+    moreBtn.addEventListener('click', e => {
+      e.stopPropagation();
+      drawer.classList.toggle('open');
+    });
+    if (backdrop) backdrop.addEventListener('click', closeDrawer);
+    const drawerDiff = q('#drawer-diff-' + id);
+    const drawerReset = q('#drawer-reset-' + id);
+    const drawerResetDisplay = q('#drawer-reset-display-' + id);
+    if (drawerDiff) drawerDiff.addEventListener('click', () => { closeDrawer(); openGitDiff(id); });
+    if (drawerReset) drawerReset.addEventListener('click', () => { closeDrawer(); resetWorkerState(id); });
+    if (drawerResetDisplay) drawerResetDisplay.addEventListener('click', () => { closeDrawer(); resetDisplay(id); });
+  }
+
   if (killBtn) killBtn.addEventListener('click', () => killWorker(id));
   if (sendBtn) sendBtn.addEventListener('click', () => sendInput(id));
   if (monitorModeSelector) monitorModeSelector.addEventListener('change', (e) => setMonitorMode(id, e.target.value));
@@ -665,9 +694,7 @@ function resetDisplay(id) {
     delete box.dataset.lastHeight;
     box.scrollTop = box.scrollHeight;
   }
-  if (typeof sendResize === 'function') {
-    sendResize();
-  }
+  requestAnimationFrame(sendResize);
 }
 
 function setMonitorMode(id, mode) {
