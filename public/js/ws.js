@@ -22,36 +22,13 @@ function initWS() {
 }
 
 function handleMsg(d) {
-  if (d.type === 'spawned') {
-    ensureCard(d.id, d.cwd, d.status, [], d.cmd, d.reason || null, d);
-    if (!d.fromRecovery) selectTab(d.id);
+  if (d && d.type === 'tunnel') {
+    // Tunnel URL broadcast handling (if tunnel URL starts, just store it)
+    window._tunnelUrl = d.url;
+    return;
   }
-  if (d.type === 'log') appendLog(d.id, d.src, d.text);
-  if (d.type === 'status') updateStatus(d.id, d.status, d.reason || null);
-  if (d.type === 'cwd') updateCwd(d.id, d.cwd);
-  if (d.type === 'aiState') updateAIState(d.id, d.state);
-  if (d.type === 'monitorMeta') updateMonitorMeta(d.id, d);
-  if (d.type === 'sessionAttached') updateSessionAttached(d.id, d.attached);
-  if (d.type === 'sessionName') {
-    const tab = document.querySelector('.tab[data-id="' + d.id + '"]');
-    if (tab) {
-      tab.dataset.sessionName = d.sessionName;
-      if (typeof renderTitle === 'function') renderTitle(d.id);
-    }
-  }
-  if (d.type === 'snapshot') {
-    const box = document.getElementById('logs-' + d.id);
-    if (box) {
-      if (typeof initLogScrollLock === 'function') initLogScrollLock(box);
-      var shouldAutoScroll = typeof isAutoScrollEnabled === 'function'
-        ? isAutoScrollEnabled(box)
-        : isNearBottom(box);
-      
-      const render = typeof ansiToHtml === 'function' ? ansiToHtml : t => t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-      box.innerHTML = d.lines.map(t => '<div class="log-line stdout">' + render(t) + '</div>').join('');
-
-      if (shouldAutoScroll) box.scrollTop = box.scrollHeight;
-    }
+  if (window.workerStore) {
+    window.workerStore.update(d);
   }
 }
 
@@ -152,77 +129,12 @@ function loadAll() {
     .then(list => {
       const serverIds = new Set(list.map(w => String(w.id)));
 
-      // Prune client DOM tabs/panels whose worker IDs are no longer in the server list
-      document.querySelectorAll('.tab').forEach(tab => {
-        const id = tab.dataset.id;
-        if (id && !serverIds.has(id)) {
-          tab.remove();
-          const panel = document.querySelector('.tab-panel[data-id="' + id + '"]');
-          if (panel) panel.remove();
-          const logsBox = document.getElementById('logs-' + id);
-          if (logsBox && window.resizeObserver) {
-            window.resizeObserver.unobserve(logsBox);
-          }
-        }
-      });
-
-      // Prune closedTabs of any IDs that are no longer active on the server
-      if (typeof closedTabs !== 'undefined') {
-        let changed = false;
-        closedTabs.forEach(id => {
-          if (!serverIds.has(id)) {
-            closedTabs.delete(id);
-            changed = true;
-          }
+      if (window.workerStore) {
+        list.forEach(w => {
+          window.workerStore.update({ type: 'spawned', ...w });
         });
-        if (changed && typeof saveClosedTabs === 'function') {
-          saveClosedTabs();
-        }
-      }
-
-      list.forEach(w => {
-        const cardExists = !!document.getElementById('card-' + w.id);
-        ensureCard(w.id, w.cwd, w.status, w.logs, w.cmd, w.exitReason || null, w);
-        if (cardExists) {
-          // Sync dataset properties that could have changed
-          const tab = document.querySelector('.tab[data-id="' + w.id + '"]');
-          if (tab) {
-            tab.dataset.cwd = w.cwd;
-            tab.dataset.cmd = w.cmd || '';
-            if (w.sessionName) tab.dataset.sessionName = w.sessionName;
-          }
-          if (typeof renderTitle === 'function') {
-            renderTitle(w.id, w.cwd, w.cmd);
-          }
-          if (typeof updateStatus === 'function') {
-            updateStatus(w.id, w.status, w.exitReason || null);
-          }
-          const logsBox = document.getElementById('logs-' + w.id);
-          if (logsBox && w.logs) {
-            logsBox.innerHTML = '';
-            w.logs.forEach(l => appendLog(w.id, l.src, l.text));
-          }
-        }
-        if (w.aiState) updateAIState(w.id, w.aiState);
-        updateMonitorMeta(w.id, w);
-        updateSessionAttached(w.id, w.sessionAttached === 1);
-      });
-      if (typeof restoreTabOrder === 'function') {
-        restoreTabOrder();
-      }
-      const savedTab = localStorage.getItem('nextmux.activeTab.v1');
-      if (savedTab && !closedTabs.has(savedTab) && document.querySelector('.tab[data-id="' + savedTab + '"]:not(.closed)')) {
-        selectTab(savedTab);
-      } else {
-        const visibleTabs = Array.from(document.querySelectorAll('.tab:not(.closed)'));
-        if (visibleTabs.length > 0) {
-          selectTab(visibleTabs[0].dataset.id);
-        }
-      }
-      
-      // Sync placeholders after loading everything
-      if (typeof syncUIPlaceholders === 'function') {
-        syncUIPlaceholders();
+        window.workerStore.prune(serverIds);
+        window.workerStore.emit('loadComplete', serverIds);
       }
     });
 }

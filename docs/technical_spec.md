@@ -26,14 +26,18 @@ NexTmux is designed as a zero-framework, low-dependency client-server applicatio
 graph TD
     subgraph Client [Web Browser Client]
         AppJS[app.js: Init & Auth]
-        WSJS[ws.js: WebSocket & Resizer]
-        WorkersJS[workers.js: Cards & Inputs]
+        WSJS[ws.js: WebSocket Transport]
+        StoreJS[store.js: WorkerStore State]
+        WorkersJS[workers.js: Cards & Inputs DOM]
         DiffJS[git-diff.js: Diff2Html Visualizer]
     end
 
     subgraph Server [Node.js Monolith: server.js]
         HTTPServer[Built-in HTTP Server]
         WSServer[WebSocket Server]
+        SessionMgr[sessionManager.js]
+        TunnelMgr[tunnelManager.js]
+        Worker[worker.js]
         Watcher[watcherEngine.js]
         MsgProc[messageProcessor.js]
         PatEng[patternEngine.js]
@@ -49,34 +53,40 @@ graph TD
 
     AppJS -->|HTTP Requests| HTTPServer
     WSJS <-->|WebSockets| WSServer
-    HTTPServer -->|Spawns / Execs| Tmux
-    HTTPServer -->|Manages Processes| CF
+    WSJS -->|Updates| StoreJS
+    StoreJS -->|Change Events| WorkersJS
+    SessionMgr -->|Manages Workers| Worker
+    SessionMgr -->|Executes Tmux Calls| Tmux
+    TunnelMgr -->|Manages Process| CF
     SessMgr -->|Persists State| StateFile
     TGService -->|Dispatches Alerts| Telegram[Telegram API]
 ```
 
 ### 2.1 Backend Server (`server.js`)
-The backend server (`server.js`) acts as the central router and coordinator. It integrates the modular services from `lib/` using core standard libraries (`http`, `net`, `fs`, `path`).
-* **HTTP Server**: Serves static frontend assets (`index.html`, client JS, and CSS) and handles REST API requests.
-* **WebSocket Server (via `ws`)**: Manages active connections, broadcasting shell logs, worker status, CWD changes, and tunnel URLs to clients.
-* **State Management**: Orchestrates worker states and references configuration/active sessions across user interactions.
+The backend server (`server.js`) acts as the central coordinator and HTTP/WebSocket router. It exposes REST API routes and routes incoming WebSockets requests, delegating all state monitoring, timers, and process management to modular services.
+* **HTTP Server**: Serves static frontend assets (`index.html`, client JS, and CSS) and routes REST API requests.
+* **WebSocket Server (via `ws`)**: Manages client connections, heartbeat pings, and relays resize signals to active sessions.
 
-### 2.2 Server-Side Helper Modules (`lib/`)
-The backend relies on isolated modules to implement specialized logic, subprocess bindings, security, and alerts:
-1. **`tmuxService.js`**: Native `tmux` subprocess execution bindings (`tmuxExec`, `tmuxExecAsync`, `isAlive`), safety name validation (`sanitizeSessionName`), and stable session identity resolution (`resolveSessionId`, `parseSessionIdFromList`) — converts a mutable session name into the tmux-assigned `$session_id`.
-2. **`paneInfoParser.js`**: Pure `parseGlobalPaneInfo(raw)` function that parses `tmux list-panes -a` output into a `Map<sessionName, { cwd, paneCmd, sessionId, sessionAttached }>`, filtering to the active window's active pane only.
-3. **`authService.js`**: Manages HTTP session creation, cookie signing, timed session-pruning, security matching (`timingSafePasswordMatch`), and IP-based rate limiting to prevent brute-force attacks.
-4. **`patternEngine.js`**: Core regular expression analyzer. Compiled regexes check shell history to detect active requests or rate-limit warnings. It parses complex reset strings (relative times like `3h 15m` or absolute timestamps like `12:20am (Asia/Bangkok)`) into UTC milliseconds.
-5. **`watcherEngine.js`**: Monitors output differences over time. If a session is quiet, it transitions the worker's status from `running` to `idle` after the configured threshold.
-6. **`messageProcessor.js`**: Analyzes text layout cues (e.g. Yes/No questions `[y/N]`, numbered menus `1. Option`, and key requests) to formulate auto-responses for Auto Mode.
-7. **`sessionStateManager.js`**: Serializes worker configurations, activity logs, and rate-limit timers. Persists states to `state/session-state.json` via a debounced, 500ms write queue. State is keyed by the stable `tmuxSessionId` (`$N`) when available, with `sessionName` as fallback — state survives session renames.
-8. **`telegramService.js`**: Connects to the Telegram Bot API to deliver alerts when workers stall.
+### 2.2 Server-Side Modules (`lib/`)
+The backend relies on isolated modules to implement specialized logic, state tracking, subprocess bindings, security, and alerts:
+1. **`worker.js`**: Core worker logic. Encapsulates the I/O-free state machine for a single terminal worker, tracking CWD, dimensions, logs, and rate-limit timers. Methods return pure `Event[]` directives.
+2. **`sessionManager.js`**: Orchestrates worker collection lifecycle, schedules background polling intervals, runs poll output cycles, recovers active sessions, and processes tmux command execution directives.
+3. **`tunnelManager.js`**: Manages the `cloudflared` tunnel subprocess lifecycle, parses stdout for TryCloudflare URLs, performs health check loops, and handles auto-restarts.
+4. **`tmuxService.js`**: Native `tmux` subprocess execution bindings (`tmuxExec`, `tmuxExecAsync`, `isAlive`), safety name validation (`sanitizeSessionName`), and stable session identity resolution (`resolveSessionId`, `parseSessionIdFromList`).
+5. **`paneInfoParser.js`**: Pure `parseGlobalPaneInfo(raw)` function that parses `tmux list-panes -a` output into a `Map<sessionName, { cwd, paneCmd, sessionId, sessionAttached }>`, filtering to the active window's active pane only.
+6. **`authService.js`**: Manages HTTP session creation, cookie signing, timed session-pruning, security matching (`timingSafePasswordMatch`), and IP-based rate limiting.
+7. **`patternEngine.js`**: Core regular expression analyzer. Compiled regexes check shell history to detect active requests or rate-limit warnings. It parses complex reset strings into UTC milliseconds.
+8. **`watcherEngine.js`**: Monitors output differences over time. If a session is quiet, it transitions the worker's status from `running` to `idle` after the configured threshold.
+9. **`messageProcessor.js`**: Analyzes text layout cues to formulate auto-responses for Auto Mode.
+10. **`sessionStateManager.js`**: Serializes worker configurations, activity logs, and rate-limit timers. Persists states to `state/session-state.json` via a debounced, 500ms write queue.
+11. **`telegramService.js`**: Connects to the Telegram Bot API to deliver alerts when workers stall.
 
 ### 2.3 Frontend Client (`public/`)
 The frontend is written in vanilla ES6 JavaScript and HTML5/CSS3. It does not pull in major frameworks (like React or Vue) to keep loads fast and latency low.
 * **`app.js`**: Controls the login view and routes user interactions. Hooks into global keydowns to feed typing inputs directly to active sessions.
-* **`ws.js`**: Configures the WebSocket connection and measures terminal dimensions using a dummy DOM character span to adjust the server-side tmux pane layout dynamically.
-* **`workers.js`**: Generates high-density cards for active sessions, updating logs, virtual keys, scroll logs, and supervisors.
+* **`store.js`**: Client-side worker state store. Caches logs, status, and metadata, emitting events when states are updated. Decouples transport from UI.
+* **`ws.js`**: Configures the WebSocket connection, coordinates API fetch helper methods, and handles client resizing actions, sending size packets up to the server.
+* **`workers.js`**: Listens to `workerStore` change events and reactively generates/modifies card elements, log boxes, visual keys, and AI supervisor indicators.
 * **`git-diff.js`**: Communicates with `/api/git-diff` and renders visual diffs using the CDN-delivered `diff2html` library.
 * **`ansi.js`**: Converts raw ANSI escape sequences into styled, theme-compliant HTML elements.
 

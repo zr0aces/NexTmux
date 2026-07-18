@@ -956,3 +956,117 @@ function showScanModal(sessions) {
   document.body.appendChild(overlay);
   attachBtn.focus();
 }
+
+// ── Store Event Listeners to Drive DOM rendering ──
+if (window.workerStore) {
+  window.workerStore.on('spawned', (id, w, fromRecovery) => {
+    ensureCard(id, w.cwd, w.status, w.logs, w.cmd, w.exitReason || null, w);
+    
+    // Sync dataset properties that could have changed
+    const tab = document.querySelector('.tab[data-id="' + id + '"]');
+    if (tab) {
+      tab.dataset.cwd = w.cwd;
+      tab.dataset.cmd = w.cmd || '';
+      if (w.sessionName) tab.dataset.sessionName = w.sessionName;
+    }
+    renderTitle(id, w.cwd, w.cmd);
+    updateStatus(id, w.status, w.exitReason || null);
+    
+    if (w.aiState) updateAIState(id, w.aiState);
+    updateMonitorMeta(id, w);
+    updateSessionAttached(id, w.sessionAttached === 1);
+    
+    if (!fromRecovery) selectTab(id);
+  });
+
+  window.workerStore.on('log', (id, src, text) => {
+    appendLog(id, src, text);
+  });
+
+  window.workerStore.on('status', (id, status, reason) => {
+    updateStatus(id, status, reason);
+  });
+
+  window.workerStore.on('cwd', (id, cwd) => {
+    updateCwd(id, cwd);
+  });
+
+  window.workerStore.on('aiState', (id, state) => {
+    updateAIState(id, state);
+  });
+
+  window.workerStore.on('sessionAttached', (id, attached) => {
+    updateSessionAttached(id, attached);
+  });
+
+  window.workerStore.on('sessionName', (id, sessionName) => {
+    const tab = document.querySelector('.tab[data-id="' + id + '"]');
+    if (tab) {
+      tab.dataset.sessionName = sessionName;
+      renderTitle(id);
+    }
+  });
+
+  window.workerStore.on('snapshot', (id, lines) => {
+    const box = document.getElementById('logs-' + id);
+    if (box) {
+      initLogScrollLock(box);
+      var shouldAutoScroll = typeof isAutoScrollEnabled === 'function'
+        ? isAutoScrollEnabled(box)
+        : isNearBottom(box);
+      
+      const render = typeof ansiToHtml === 'function' ? ansiToHtml : t => t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+      box.innerHTML = lines.map(t => '<div class="log-line stdout">' + render(t) + '</div>').join('');
+ 
+      if (shouldAutoScroll) box.scrollTop = box.scrollHeight;
+    }
+  });
+
+  window.workerStore.on('monitorMeta', (id, w) => {
+    updateMonitorMeta(id, w);
+  });
+
+  window.workerStore.on('pruned', (id) => {
+    const tab = document.querySelector('.tab[data-id="' + id + '"]');
+    if (tab) tab.remove();
+    const panel = document.querySelector('.tab-panel[data-id="' + id + '"]');
+    if (panel) panel.remove();
+    const logsBox = document.getElementById('logs-' + id);
+    if (logsBox && window.resizeObserver) {
+      window.resizeObserver.unobserve(logsBox);
+    }
+  });
+
+  window.workerStore.on('loadComplete', (serverIds) => {
+    if (typeof closedTabs !== 'undefined') {
+      let changed = false;
+      closedTabs.forEach(id => {
+        if (!serverIds.has(id)) {
+          closedTabs.delete(id);
+          changed = true;
+        }
+      });
+      if (changed && typeof saveClosedTabs === 'function') {
+        saveClosedTabs();
+      }
+    }
+
+    if (typeof restoreTabOrder === 'function') {
+      restoreTabOrder();
+    }
+
+    const savedTab = localStorage.getItem('nextmux.activeTab.v1');
+    if (savedTab && !closedTabs.has(savedTab) && document.querySelector('.tab[data-id="' + savedTab + '"]:not(.closed)')) {
+      selectTab(savedTab);
+    } else {
+      const visibleTabs = Array.from(document.querySelectorAll('.tab:not(.closed)'));
+      if (visibleTabs.length > 0) {
+        selectTab(visibleTabs[0].dataset.id);
+      }
+    }
+    
+    if (typeof syncUIPlaceholders === 'function') {
+      syncUIPlaceholders();
+    }
+  });
+}

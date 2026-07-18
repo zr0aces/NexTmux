@@ -21,20 +21,26 @@ Config files: `.env` (PORT, DASHBOARD_PASSWORD, TELEGRAM_BOT_TOKEN, etc.), `conf
 
 ## Architecture
 
-**Server (`server.js`):** Single-file Node.js HTTP + WebSocket server (~1200 lines). In-memory `sessions` and `workers` Maps for state. Calls tmux via `execFileSync` (user-supplied values) or `execSync` (safe static strings). Polls terminal output every 1s and broadcasts via WebSocket.
+**Server (`server.js`):** Node.js HTTP + WebSocket server (~500 lines). Acts strictly as a coordinator and request/event router, delegating all worker operations, timer polling, and tunnels to lib/ services.
 
 **Client (`index.html` + `public/`):** Single HTML entry point; all CSS/JS in `public/`. Tab/Split dual layout modes. Real-time updates via WebSocket. localStorage for user preferences.
 
 **JS modules (`public/js/`):**
 - `app.js` — Init, login, event binding, keyboard shortcuts
-- `workers.js` — Worker card UI, log display, worker actions
-- `ws.js` — WebSocket connection, API helpers, terminal resize
+- `store.js` — Client-side worker state store; implements event emitter to decouple network transport from UI rendering
+- `workers.js` — Worker card UI, log display, and card actions; reacts to `workerStore` change events
+- `ws.js` — WebSocket connection transport, API helpers, terminal resize trigger
 - `layout.js` — Layout switching & tab management
 - `favorites.js` — Favorites & path management
 - `ansi.js` — ANSI escape code renderer for terminal output
 - `git-diff.js` — Git diff side-panel (uses diff2html from CDN)
 
 **lib/ modules (server-side):**
+- `worker.js` — State machine for a single worker (CWD, dims, logs, AI status, reset times). Fully I/O-free and unit-testable.
+- `sessionManager.js` — Orchestrates active worker Map, poll loops scheduling, recovery, and executes tmux commands.
+- `tunnelManager.js` — Manages cloudflared subprocess, extracts URL, loops health checks, and handles auto-restarts.
+- `tmuxService.js` — Helper subprocess wrapper for executing tmux commands safely.
+- `paneInfoParser.js` — Parser for bulk list-panes outputs to avoid spawning subprocesses per poll.
 - `patternEngine.js` — Compiles regex patterns and scans terminal output for AI wait-states (returns `matched`, `patternName`, `excerpt`)
 - `watcherEngine.js` — State machine: `running` → `idle` → `waiting` based on output changes + idle threshold
 - `sessionStateManager.js` — Persists per-worker metadata to `state/session-state.json`; handles notification debounce

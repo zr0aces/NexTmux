@@ -10,6 +10,8 @@ const { createTelegramService } = require("./lib/telegramService");
 const { createSessionStateManager } = require("./lib/sessionStateManager");
 const { createWatcherEngine, getNewLinesCount, cleanRateLimitLine } = require("./lib/watcherEngine");
 const { createMessageProcessor, RATE_LIMIT_PATTERN_NAMES } = require("./lib/messageProcessor");
+const SessionManager = require("./lib/sessionManager");
+const TunnelManager = require("./lib/tunnelManager");
 
 const { sanitizeSessionName, tmuxExec, tmuxExecAsync, isAlive, resolveSessionId } = require("./lib/tmuxService");
 const { parseGlobalPaneInfo } = require("./lib/paneInfoParser");
@@ -48,36 +50,12 @@ if (PASSWORD === "changeme") {
   console.warn("⚠️  Using default password. Please set DASHBOARD_PASSWORD environment variable.");
 }
 
-const workers = new Map();
-let nextId = 1;
 let tunnelUrl = null;
-let tunnelProcess = null;
-let tunnelHealthFailures = 0;
-let cachedTunnelUrl = null;
 const ACTION_WINDOW_MS = 7000;
 const SHELL_COMMANDS = new Set(["bash", "zsh", "sh", "fish"]);
 const issueAlertTime = new Map(); // key: alert key, value: timestamp
 const ISSUE_ALERT_COOLDOWN_MS = 120000; // 120s cooldown per issue key
 const RATE_LIMIT_PATTERNS = RATE_LIMIT_PATTERN_NAMES;
-
-let globalPaneInfo = new Map(); // sessionName -> { cwd, paneCmd, sessionId, sessionAttached }
-let lastGlobalPaneFetch = 0;
-const GLOBAL_PANE_FETCH_INTERVAL = 3000; // fetch every 3 seconds
-
-async function updateGlobalPaneInfo() {
-  const now = Date.now();
-  if (now - lastGlobalPaneFetch < GLOBAL_PANE_FETCH_INTERVAL) return;
-  lastGlobalPaneFetch = now;
-  try {
-    const raw = await tmuxExecAsync(
-      "list-panes", "-a", "-F",
-      "#{session_name}|||#{session_id}|||#{pane_current_path}|||#{pane_current_command}|||#{window_active}|||#{pane_active}|||#{session_attached}"
-    );
-    globalPaneInfo = parseGlobalPaneInfo(raw);
-  } catch (e) {
-    // Silent fail, will retry next interval
-  }
-}
 
 function gitExecAsync(cwd, args, maxBuffer = 10 * 1024 * 1024) {
   return new Promise((resolve, reject) => {
@@ -154,115 +132,37 @@ const telegramService = createTelegramService({
   chatId: TELEGRAM_CHAT_ID,
 });
 
-function detectCliType(cmd) {
-  const normalized = String(cmd || "").toLowerCase().trim();
-  const baseCmd = normalized.split(/\s+|\//)[0];
-  
-  if (baseCmd === "claude" || normalized.includes("claude")) return "claude";
-  if (baseCmd === "codex" || normalized.includes("codex")) return "codex";
-  if (baseCmd === "agy" || normalized.includes("agy") || normalized.includes("antigravity")) return "agy";
-  
-  return null; // Generic fallback
-}
+const sessionManager = new SessionManager({
+  monitorConfig,
+  appConfig,
+  watcherEngine,
+  sessionStateManager,
+  telegramService,
+  onEvent: (event) => broadcast(event),
+  extractResetTime,
+  parseResetEpoch,
+  cleanRateLimitLine,
+  getNewLinesCount,
+  RATE_LIMIT_PATTERNS: RATE_LIMIT_PATTERN_NAMES,
+});
 
-function getBaseCommand(cmd) {
-  if (!cmd) return "";
-  return String(cmd).trim().split(/\s+/)[0] || "";
-}
-
-function rememberAction(w, type, detail) {
-  w.lastAction = { type, detail, ts: Date.now() };
-}
-
-function recentAction(w) {
-  if (!w || !w.lastAction) return null;
-  if (Date.now() - w.lastAction.ts > ACTION_WINDOW_MS) return null;
-  return w.lastAction;
-}
-
-function inferExitReason(w, fallback) {
-  const action = recentAction(w);
-  if (action?.type === "stop_button") return "Stopped from dashboard (Stop button).";
-  if (action?.type === "special_key" && action.detail === "C-c") return "Interrupted by Ctrl+C sent from dashboard.";
-  if (action?.type === "special_key") return `Exited after key input from dashboard (${action.detail}).`;
-  if (w?.status === "completed" && w?.lastPaneCommand && w?.expectedCmd && w.lastPaneCommand !== w.expectedCmd) {
-    return `Command '${w.expectedCmd}' is no longer active (pane now '${w.lastPaneCommand}').`;
-  }
-  return fallback || "Session exited (reason unknown).";
-}
-
-function getTmuxTarget(w) {
-  return w && w.tmuxSessionId ? w.tmuxSessionId : (w && w.sessionName) || null;
-}
-
-
-
-function startPolling(id) {
-  const w = workers.get(id);
-  if (!w) return;
-  if (w.pollTimer) clearInterval(w.pollTimer);
-  w.pollTimer = setInterval(() => pollOutput(id), monitorConfig.pollIntervalMs);
-}
-
-function initializeWorkerMonitorState(worker) {
-  if (!worker) return;
-  worker.lastActivityAt = worker.lastActivityAt || null;
-  worker.waitingState = worker.waitingState || "running";
-  worker.lastMatchedPattern = worker.lastMatchedPattern || null;
-  worker.lastPromptExcerpt = worker.lastPromptExcerpt || null;
-  worker.lastNotificationAt = worker.lastNotificationAt || null;
-  worker.notificationStatus = worker.notificationStatus || null;
-  worker.lastAutoResponseKey = worker.lastAutoResponseKey || null;
-  worker.aiMonitorEnabled = worker.aiMonitorEnabled !== undefined ? worker.aiMonitorEnabled : monitorConfig.enabled;
-  worker.autoMode = worker.autoMode !== undefined ? worker.autoMode : false;
-  sessionStateManager.hydrateWorker(worker);
-  if (worker.autoMode && worker.aiMonitorEnabled === false) worker.aiMonitorEnabled = true;
-  worker.aiState = worker.waitingState;
-}
-
-function getMonitorMeta(worker) {
-  return sessionStateManager.getApiMeta(worker);
-}
-
-function broadcastMonitorMeta(id) {
-  const worker = workers.get(id);
-  if (!worker) return;
-  const nextMeta = getMonitorMeta(worker);
-  const nextKey = JSON.stringify(nextMeta);
-  if (worker.lastMetaBroadcastKey === nextKey) return;
-  worker.lastMetaBroadcastKey = nextKey;
-  broadcast({ type: "monitorMeta", id, ...nextMeta });
-}
-
-function spawnWorker(cwd, cmd) {
-  cmd = cmd || appConfig.defaultCommand || "claude";
-  const id = String(nextId++);
-  const sessionName = "term-" + id;
-  const cliType = detectCliType(cmd);
-  tmuxExec("new-session", "-d", "-s", sessionName, "-c", cwd, "-e", "CLAUDECODE=");
-  tmuxExec("send-keys", "-t", sessionName, cmd, "Enter");
-  const logs = [];
-  const tmuxSessionId = resolveSessionId(sessionName);
-  workers.set(id, {
-    sessionName,
-    cwd,
-    cmd,
-    cliType,
-    logs,
-    status: "running",
-    expectedCmd: getBaseCommand(cmd),
-    seenExpectedCmd: false,
-    exitReason: null,
-    lastPaneCommand: null,
-    lastAction: null,
-    tmuxSessionId,
-    sessionAttached: 0,
-  });
-  initializeWorkerMonitorState(workers.get(id));
-  startPolling(id);
-  broadcast({ type: "spawned", id, cwd, cmd, status: "running", sessionName, cliType, ...getMonitorMeta(workers.get(id)) });
-  return id;
-}
+const tunnelManager = new TunnelManager({
+  port: PORT,
+  tunnelEnabled: TUNNEL_ENABLED,
+  healthcheckEnabled: ENABLE_TUNNEL_HEALTHCHECK,
+  onUrlChange: (url) => {
+    tunnelUrl = url;
+    broadcast({ type: "tunnel", url });
+    if (DISCORD_WEBHOOK) {
+      fetch(DISCORD_WEBHOOK, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ content: `☁️ NexTmux → ${url}` }),
+      }).catch(() => {});
+    }
+  },
+  onAlert: (alert) => sendIssueAlert(alert),
+});
 
 function sendIssueAlert({ key, title, description, color = 0xf0ad4e, fields = [] }) {
   if (!ALERT_WEBHOOK) return;
@@ -290,331 +190,7 @@ function sendIssueAlert({ key, title, description, color = 0xf0ad4e, fields = []
   });
 }
 
-function sendWaitingAlert(id, detection, now = Date.now()) {
-  const w = workers.get(id);
-  if (!w) return;
-
-  const decision = sessionStateManager.shouldNotify({
-    worker: w,
-    patternName: detection?.patternName || "waiting",
-    matchedText: detection?.matchedText || "",
-    excerpt: detection?.excerpt || "",
-    now,
-  });
-  if (!decision.shouldSend) {
-    const status = decision.reason === "duplicate" ? "skipped_duplicate" : "skipped_debounce";
-    sessionStateManager.markNotification(w, status, now);
-    broadcastMonitorMeta(id);
-    return;
-  }
-
-  telegramService.sendWaitingNotification({
-    sessionName: w.sessionName,
-    patternName: detection?.patternName,
-    matchedText: detection?.matchedText,
-    excerpt: detection?.excerpt || w.lastPromptExcerpt || "",
-    resetTime: extractResetTime(detection?.excerpt || "") || w.tokenResetAt || null,
-    timestamp: new Date(now).toISOString(),
-  }).then((result) => {
-    if (result.ok) {
-      sessionStateManager.markNotification(w, "sent", now, decision.key);
-    } else if (result.skipped) {
-      sessionStateManager.markNotification(w, "skipped", now);
-    } else {
-      sessionStateManager.markNotification(w, "failed", now);
-      console.warn("Telegram waiting alert failed", String(w.sessionName), String(result.error || "unknown_error"));
-    }
-    broadcastMonitorMeta(id);
-  }).catch((err) => {
-    sessionStateManager.markNotification(w, "failed", now);
-    broadcastMonitorMeta(id);
-    console.warn("Telegram waiting alert exception", String(w.sessionName), String(err?.message || err));
-  });
-}
-
-const lastCapture = new Map(); // workerId → last captured tmux output string
-
-async function resizeWorker(id, cols, rows) {
-  const w = workers.get(String(id));
-  if (!w) return;
-  w.cols = cols;
-  w.rows = rows;
-  
-  if (!isAlive(getTmuxTarget(w))) return;
-
-  const c = cols || 80;
-  const r = rows || 50;
-
-  // Only resize if no terminal client is attached!
-  if (w.sessionAttached !== 1) {
-    if (c !== w._lastCols || r !== w._lastRows) {
-      tmuxExec("resize-pane", "-t", getTmuxTarget(w), "-x", String(c), "-y", String(r));
-      tmuxExec("resize-window", "-t", getTmuxTarget(w), "-x", String(c), "-y", String(r));
-      w._lastCols = c;
-      w._lastRows = r;
-    }
-  }
-
-  try {
-    const output = await tmuxExecAsync("capture-pane", "-t", getTmuxTarget(w), "-p", "-S", "-500", "-J");
-    lastCapture.set(String(id), output);
-    const lines = output.split("\n");
-    w.logs = lines.slice(-200).map(text => ({ src: "stdout", text, ts: Date.now() }));
-    broadcast({ type: "snapshot", id: String(id), lines });
-  } catch (e) {
-    console.error("Failed to capture pane after resize:", e);
-  }
-}
-
-async function pollOutput(id) {
-  const w = workers.get(id);
-  if (!w || w._polling) return;  // skip if a previous poll cycle hasn't finished
-  w._polling = true;
-  try {
-  if (!isAlive(getTmuxTarget(w))) {
-    if (w.pollTimer) clearInterval(w.pollTimer);
-    w.pollTimer = null;
-    w.status = 'completed';
-    w.aiState = null;
-    sessionStateManager.setWaitingState(w, "disconnected");
-    w.exitReason = w.exitReason || inferExitReason(w, "tmux session ended or was killed externally.");
-    broadcast({ type: "status", id, status: "completed", reason: w.exitReason });
-    broadcastMonitorMeta(id);
-    return;
-  }
-
-  // Query consolidated global pane info (saves spawning one sub-process per poll)
-  await updateGlobalPaneInfo();
-  const cachedInfo = w.tmuxSessionId ? globalPaneInfo.get(w.tmuxSessionId) : [...globalPaneInfo.values()].find(info => info.sessionName === w.sessionName);
-
-  // Detect and broadcast sessionAttached state changes
-  const nowAttached = cachedInfo?.sessionAttached === "1" ? 1 : 0;
-  if (nowAttached !== (w.sessionAttached || 0)) {
-    const prevAttached = w.sessionAttached || 0;
-    w.sessionAttached = nowAttached;
-    broadcast({ type: "sessionAttached", id, attached: nowAttached === 1 });
-    
-    if (nowAttached === 1) {
-      try {
-        tmuxExec("resize-window", "-A", "-t", getTmuxTarget(w));
-        w._lastCols = undefined;
-        w._lastRows = undefined;
-      } catch (e) {
-        console.error("Failed to run resize-window -A:", e);
-      }
-    } else if (prevAttached === 1 && nowAttached === 0) {
-      w._lastCols = undefined;
-      w._lastRows = undefined;
-    }
-  }
-
-  const cols = w.cols || 80;
-  const rows = w.rows || 50;
-  // Only resize when dimensions actually changed to avoid unnecessary tmux calls,
-  // and only resize if no terminal client is attached!
-  if (w.sessionAttached !== 1) {
-    if (cols !== w._lastCols || rows !== w._lastRows) {
-      tmuxExec("resize-pane", "-t", getTmuxTarget(w), "-x", String(cols), "-y", String(rows));
-      tmuxExec("resize-window", "-t", getTmuxTarget(w), "-x", String(cols), "-y", String(rows));
-      w._lastCols = cols;
-      w._lastRows = rows;
-    }
-  }
-  const output = await tmuxExecAsync("capture-pane", "-t", getTmuxTarget(w), "-p", "-S", "-500", "-J");
-  const newLinesCount = getNewLinesCount(output, lastCapture.get(id));
-  w.totalLinesCount = (w.totalLinesCount || 0) + newLinesCount;
-
-  const currentCwd = cachedInfo ? cachedInfo.cwd : w.cwd;
-  const currentPaneCmd = cachedInfo ? cachedInfo.paneCmd : w.lastPaneCommand;
-  if (cachedInfo) {
-    if (!w.tmuxSessionId && cachedInfo.sessionId) {
-      w.tmuxSessionId = cachedInfo.sessionId;
-    }
-    if (cachedInfo.sessionName && cachedInfo.sessionName !== w.sessionName) {
-      w.sessionName = cachedInfo.sessionName;
-      broadcast({ type: "sessionName", id, sessionName: w.sessionName });
-    }
-  }
-  if (currentCwd && currentCwd !== w.cwd) {
-    w.cwd = currentCwd;
-    broadcast({ type: "cwd", id, cwd: currentCwd });
-  }
-  if (currentPaneCmd) {
-    w.lastPaneCommand = currentPaneCmd;
-    if (w.expectedCmd && currentPaneCmd === w.expectedCmd) w.seenExpectedCmd = true;
-    const switchedToShell = w.seenExpectedCmd && currentPaneCmd !== w.expectedCmd && SHELL_COMMANDS.has(currentPaneCmd);
-    if (switchedToShell && w.status !== "completed") {
-      if (w.pollTimer) clearInterval(w.pollTimer);
-      w.pollTimer = null;
-      w.status = "completed";
-      w.aiState = null;
-      sessionStateManager.setWaitingState(w, "disconnected");
-      w.exitReason = inferExitReason(w, `Command '${w.expectedCmd}' exited and returned to shell '${currentPaneCmd}'.`);
-      broadcast({ type: "status", id, status: "completed", reason: w.exitReason });
-      broadcastMonitorMeta(id);
-      return;
-    }
-  }
-
-  const now = Date.now();
-
-  if (w.aiState === "waiting" && w.resetAtEpochMs && now >= w.resetAtEpochMs) {
-    sessionStateManager.clearResetEpoch(w);
-    w.tokenResetAt = null;
-
-    // Find the rate limit line in the current output to ignore on next ticks
-    const lines = output.split("\n");
-    let foundLineIndex = -1;
-    for (let i = lines.length - 1; i >= 0; i--) {
-      const line = lines[i];
-      const looksRateLimited = /(?:rate[-_\s]*limit|usage[-_\s]*limit|token[-_\s]*limit|daily[-_\s]*limit|you(?:'|’|re| are|\s)+(?:rate[-_\s]*limited|out of.*uses))/i.test(line);
-      if (looksRateLimited) {
-        foundLineIndex = i;
-        break;
-      }
-    }
-    if (foundLineIndex !== -1) {
-      w.lastRateLimitAbsLine = (w.totalLinesCount || 0) - (lines.length - foundLineIndex);
-    }
-
-    if (w.autoMode) {
-      w.aiState = "running";
-      sessionStateManager.setWaitingState(w, "running");
-      broadcast({ type: "aiState", id, state: "running" });
-      sendInput(id, "continue");
-    }
-    broadcastMonitorMeta(id);
-    return;
-  }
-
-  const inspectOutput = cleanRateLimitLine(output, w.totalLinesCount, w.lastRateLimitAbsLine);
-  const previousInspectOutput = cleanRateLimitLine(lastCapture.get(id), (w.totalLinesCount || 0) - newLinesCount, w.lastRateLimitAbsLine);
-
-  const inspect = w.aiMonitorEnabled && monitorConfig.enabled
-    ? watcherEngine.inspect({
-        output: inspectOutput,
-        previousOutput: previousInspectOutput,
-        currentState: w.aiState || "running",
-        lastChangeTime: w.lastChangeTime,
-        now,
-      })
-    : { changed: false, nextState: null, detection: null };
-
-  if (inspect.changed) {
-    lastCapture.set(id, output);
-    w.lastChangeTime = now;
-    sessionStateManager.updateActivity(w, now);
-    const lines = output.split("\n");
-    w.logs = lines.slice(-200).map(text => ({ src: "stdout", text, ts: now }));
-    broadcast({ type: "snapshot", id, lines });
-  }
-
-  if (inspect.detection?.matched) {
-    sessionStateManager.updateMatch(w, inspect.detection);
-    const detectionExcerpt = String(inspect.detection.excerpt || "");
-    const maybeRateLimitContext = RATE_LIMIT_PATTERNS.has(inspect.detection.patternName)
-      || /(?:rate\s*limit|usage\s*limit|token\s*limit|you(?:'|’)ve hit your limit|resets?\s)/i.test(detectionExcerpt);
-    if (maybeRateLimitContext) {
-      const resetTime = extractResetTime(inspect.detection.excerpt);
-      if (resetTime) {
-        w.tokenResetAt = resetTime;
-        const epoch = parseResetEpoch(resetTime, now);
-        if (epoch) {
-          sessionStateManager.setResetEpoch(w, epoch);
-          w.lastRateLimitAbsLine = undefined; // clear recovery ignore on new rate limit
-        }
-      }
-    }
-  }
-
-  const nextState = inspect.nextState || "running";
-  const stateChanged = nextState !== w.aiState;
-  if (stateChanged) {
-    w.aiState = nextState;
-    broadcast({ type: "aiState", id, state: nextState });
-  }
-
-  if (nextState !== "waiting") {
-    w.lastAutoResponseKey = null;
-  }
-
-  if (nextState === "waiting" || nextState === "idle" || nextState === "running") {
-    sessionStateManager.setWaitingState(w, nextState);
-  }
-
-  if (inspect.detection?.matched && nextState === "waiting" && (stateChanged || inspect.changed)) {
-    sendWaitingAlert(id, inspect.detection, now);
-  }
-
-  if (nextState === "waiting" && w.autoMode && inspect.detection?.matched && (stateChanged || inspect.changed)) {
-    const responseKey = [
-      inspect.detection.patternName || "",
-      inspect.detection.matchedText || "",
-    ].join("::");
-    if (!stateChanged && responseKey && w.lastAutoResponseKey === responseKey) {
-      broadcastMonitorMeta(id);
-      return;
-    }
-    const autoResponse = inspect.detection?.autoResponse;
-    if (autoResponse !== null) {
-      sendInput(id, autoResponse);
-      w.lastAutoResponseKey = responseKey || String(now);
-    }
-  }
-
-  broadcastMonitorMeta(id);
-  } catch (e) {
-    // Keep polling alive, but emit sampled warnings for visibility.
-    w.pollErrorCount = (w.pollErrorCount || 0) + 1;
-    if (w.pollErrorCount <= 3 || w.pollErrorCount % 30 === 0) {
-      const msg = e && e.message ? e.message : String(e);
-      console.warn(`pollOutput failed for ${w.sessionName} (#${id}) [${w.pollErrorCount}]`, msg);
-    }
-  } finally {
-    if (w) w._polling = false;
-  }
-}
-
-function sendInput(id, text) {
-  const w = workers.get(id);
-  if (!w) return false;
-  if (typeof text !== "string") return false;
-  if (w.status === "completed") {
-    w.status = "running";
-    w.aiState = null;
-    w.exitReason = null;
-    sessionStateManager.setWaitingState(w, "running");
-    startPolling(id);
-    broadcast({ type: "status", id, status: "running", reason: null });
-    broadcastMonitorMeta(id);
-  }
-  const lines = text.split("\n");
-  if (lines.length > 1 && lines[lines.length - 1] === "") {
-    lines.pop();
-  }
-  for (const line of lines) {
-    tmuxExec("send-keys", "-t", getTmuxTarget(w), line, "Enter");
-  }
-  rememberAction(w, "input", "text");
-  broadcast({ type: "log", id, src: "stdin", text, ts: Date.now() });
-  return true;
-}
-
-function killWorker(id, reason) {
-  const w = workers.get(id);
-  if (!w) return false;
-  if (w.pollTimer) clearInterval(w.pollTimer);
-  w.pollTimer = null;
-  rememberAction(w, "stop_button", "kill-session");
-  tmuxExec("kill-session", "-t", getTmuxTarget(w));
-  w.status = 'stopped';
-  w.aiState = null;
-  sessionStateManager.setWaitingState(w, "disconnected");
-  w.exitReason = reason || "Stopped from dashboard.";
-  broadcast({ type: "status", id, status: "stopped", reason: w.exitReason });
-  broadcastMonitorMeta(id);
-  return true;
-}
+// resizeWorker, pollOutput, sendInput and killWorker have moved to SessionManager/Worker.
 
 let wss;
 function broadcast(obj) {
@@ -743,25 +319,12 @@ const server = http.createServer(async (req, res) => {
   if (!auth(req)) return json(res, 401, { error: "unauthorized" });
 
   if (method === "GET" && url === "/api/workers") {
-    const list = [...workers.entries()].map(([id, w]) => ({
-      id,
-      cwd: w.cwd,
-      cmd: w.cmd || "claude",
-      status: (w.status === "completed" || w.status === "stopped") ? w.status : (isAlive(getTmuxTarget(w)) ? "running" : (w.status || "stopped")),
-      sessionName: w.sessionName,
-      logs: w.logs,
-      aiState: w.aiState || null,
-      exitReason: w.exitReason || null,
-      sessionAttached: w.sessionAttached || 0,
-      ...getMonitorMeta(w),
-    }));
+    const list = sessionManager.getWorkersList();
     return json(res, 200, list);
   }
 
   if (method === "GET" && url === "/api/scan") {
     const raw = tmuxExec("ls", "-F", "#{session_name}|#{pane_current_path}|#{session_id}");
-    const existingIds = new Set([...workers.values()].map(w => w.tmuxSessionId).filter(Boolean));
-    const existingNames = new Set([...workers.values()].map(w => w.sessionName));
     const found = [];
     for (const line of raw.trim().split("\n")) {
       if (!line) continue;
@@ -769,8 +332,7 @@ const server = http.createServer(async (req, res) => {
       const sessionName = parts[0];
       const cwd = parts[1] || "unknown";
       const sessionId = parts[2] ? parts[2].trim() : null;
-      if (existingNames.has(sessionName)) continue;
-      if (sessionId && existingIds.has(sessionId)) continue;
+      if (sessionManager.findSession(sessionName, sessionId)) continue;
       found.push({ sessionName, cwd });
     }
     return json(res, 200, found);
@@ -787,30 +349,7 @@ const server = http.createServer(async (req, res) => {
       return json(res, 400, { error: "invalid sessionName" });
     }
     const cwd = body.cwd;
-    const tmuxSessionId = resolveSessionId(sessionName);
-    // Guard: if a worker already tracks this tmuxSessionId or sessionName, return its existing id
-    // to prevent duplicate tabs polling the same tmux pane.
-    const existingEntry = [...workers.entries()].find(([, w]) => 
-      (tmuxSessionId && w.tmuxSessionId === tmuxSessionId) || w.sessionName === sessionName
-    );
-    if (existingEntry) return json(res, 200, { id: existingEntry[0] });
-    const id = String(nextId++);
-    workers.set(id, {
-      sessionName,
-      cwd,
-      logs: [],
-      status: "running",
-      exitReason: null,
-      expectedCmd: "",
-      seenExpectedCmd: false,
-      lastPaneCommand: null,
-      lastAction: null,
-      tmuxSessionId,
-      sessionAttached: 0,
-    });
-    initializeWorkerMonitorState(workers.get(id));
-    startPolling(id);
-    broadcast({ type: "spawned", id, cwd, status: "running", sessionName, ...getMonitorMeta(workers.get(id)) });
+    const id = sessionManager.attachWorker(sessionName, cwd);
     return json(res, 200, { id });
   }
 
@@ -827,7 +366,7 @@ const server = http.createServer(async (req, res) => {
     } catch (e) {
       return json(res, 400, { ok: false, error: "Invalid path: does not exist or not accessible." });
     }
-    const id = spawnWorker(resolvedCwd, body.cmd);
+    const id = sessionManager.spawnWorker(resolvedCwd, body.cmd);
     return json(res, 200, { ok: true, id });
   }
 
@@ -838,7 +377,7 @@ const server = http.createServer(async (req, res) => {
     if ((typeof id !== "string" && typeof id !== "number") || typeof text !== "string") {
       return json(res, 400, { ok: false, error: "invalid input payload" });
     }
-    const inputOk = sendInput(id, text);
+    const inputOk = sessionManager.sendInput(id, text);
     return json(res, 200, { ok: inputOk });
   }
 
@@ -846,13 +385,7 @@ const server = http.createServer(async (req, res) => {
     const { ok, body } = await parseBody(req);
     if (!ok || !body) return json(res, 400, { error: "invalid request body" });
     const { id } = body;
-    const w = workers.get(id);
-    if (w) {
-      if (w.pollTimer) clearInterval(w.pollTimer);
-      sessionStateManager.removeSession(w);
-      workers.delete(id);
-      lastCapture.delete(id);
-    }
+    sessionManager.removeWorker(id);
     return json(res, 200, { ok: true });
   }
 
@@ -860,102 +393,32 @@ const server = http.createServer(async (req, res) => {
     const { ok, body } = await parseBody(req);
     if (!ok || !body) return json(res, 400, { error: "invalid request body" });
     const { id, key } = body;
-    const w = workers.get(id);
-    if (w) {
-      if (w.status === "completed") {
-        w.status = "running";
-        w.aiState = null;
-        w.exitReason = null;
-        sessionStateManager.setWaitingState(w, "running");
-        startPolling(id);
-        broadcast({ type: "status", id, status: "running", reason: null });
-        broadcastMonitorMeta(id);
-      }
-      rememberAction(w, "special_key", key);
-      tmuxExec("send-keys", "-t", getTmuxTarget(w), String(key));
-    }
-    return json(res, 200, { ok: true });
+    const keyOk = sessionManager.sendKey(id, key);
+    return json(res, 200, { ok: keyOk });
   }
 
   if (method === "POST" && url === "/api/reconnect") {
     const { ok, body } = await parseBody(req);
     if (!ok || !body) return json(res, 400, { error: "invalid request body" });
     const { id } = body;
-    const w = workers.get(id);
-    if (!w) return json(res, 404, { ok: false });
-    if (isAlive(getTmuxTarget(w))) {
-      if (w.pollTimer) clearInterval(w.pollTimer);
-      w.status = "running";
-      w.aiState = null;
-      w.exitReason = null;
-      w.seenExpectedCmd = false;
-      sessionStateManager.setWaitingState(w, "running");
-      startPolling(id);
-      broadcast({ type: "status", id, status: "running", reason: null });
-      broadcastMonitorMeta(id);
-      return json(res, 200, { ok: true });
-    }
-    return json(res, 200, { ok: false });
+    const okRec = sessionManager.reconnectWorker(id);
+    return json(res, 200, { ok: okRec });
   }
 
   if (method === "POST" && url === "/api/reset") {
     const { ok, body } = await parseBody(req);
     if (!ok || !body) return json(res, 400, { error: "invalid request body" });
     const { id } = body;
-    const w = workers.get(id);
-    if (!w) return json(res, 404, { ok: false });
-    if (isAlive(getTmuxTarget(w))) {
-      if (w.pollTimer) clearInterval(w.pollTimer);
-      
-      // 1. Remove session from sessionStateManager snapshot on disk
-      sessionStateManager.removeSession(w);
-      
-      // 2. Reset worker in-memory tracking & AI monitoring properties
-      w.status = "running";
-      w.aiState = null;
-      w.exitReason = null;
-      w.seenExpectedCmd = false;
-      w.lastPaneCommand = null;
-      w.lastAction = null;
-      w.tokenResetAt = null;
-      w.resetAtEpochMs = null;
-      w.lastRateLimitAbsLine = undefined;
-      w.lastAutoResponseKey = null;
-      w.notifiedMessageHashes = [];
-      w.sentNotificationKeys = new Set();
-      w.logs = [];
-      w._lastCols = undefined;
-      w._lastRows = undefined;
-
-      // 3. Clear cached last capture to force re-reading the whole tmux pane
-      lastCapture.delete(id);
-
-      // 4. Update the state in the sessionStateManager
-      sessionStateManager.setWaitingState(w, "running");
-      sessionStateManager.clearResetEpoch(w);
-
-      // 5. Restart polling
-      startPolling(id);
-
-      // 6. Broadcast all changes to the client
-      broadcast({ type: "status", id, status: "running", reason: null });
-      broadcast({ type: "aiState", id, state: "running" });
-      broadcast({ type: "snapshot", id, lines: [] });
-      broadcastMonitorMeta(id);
-
-      return json(res, 200, { ok: true });
-    }
-    return json(res, 200, { ok: false, error: "tmux session not alive" });
+    const okReset = sessionManager.resetWorker(id);
+    return json(res, 200, { ok: okReset });
   }
 
   if (method === "POST" && url === "/api/toggle-ai-monitor") {
     const { ok, body } = await parseBody(req);
     if (!ok || !body) return json(res, 400, { error: "invalid request body" });
     const { id } = body;
-    const w = workers.get(id);
-    if (!w) return json(res, 404, { ok: false });
-    const enabled = sessionStateManager.toggleAiMonitor(w);
-    broadcast({ type: "monitorMeta", id, ...getMonitorMeta(w) });
+    const enabled = sessionManager.toggleAiMonitor(id);
+    if (enabled === null) return json(res, 404, { ok: false });
     return json(res, 200, { ok: true, enabled });
   }
 
@@ -963,10 +426,8 @@ const server = http.createServer(async (req, res) => {
     const { ok, body } = await parseBody(req);
     if (!ok || !body) return json(res, 400, { error: "invalid request body" });
     const { id } = body;
-    const w = workers.get(id);
-    if (!w) return json(res, 404, { ok: false });
-    const enabled = sessionStateManager.toggleAutoMode(w);
-    broadcast({ type: "monitorMeta", id, ...getMonitorMeta(w) });
+    const enabled = sessionManager.toggleAutoMode(id);
+    if (enabled === null) return json(res, 404, { ok: false });
     return json(res, 200, { ok: true, enabled });
   }
 
@@ -974,11 +435,8 @@ const server = http.createServer(async (req, res) => {
     const { ok, body } = await parseBody(req);
     if (!ok || !body) return json(res, 400, { error: "invalid request body" });
     const { id, mode } = body;
-    const w = workers.get(id);
-    if (!w) return json(res, 404, { ok: false });
-    const nextMode = sessionStateManager.setMonitorMode(w, mode);
-    if (!nextMode) return json(res, 400, { ok: false, error: "invalid monitor mode" });
-    broadcast({ type: "monitorMeta", id, ...getMonitorMeta(w) });
+    const nextMode = sessionManager.setMonitorMode(id, mode);
+    if (nextMode === null) return json(res, 400, { ok: false, error: "invalid monitor mode or worker not found" });
     return json(res, 200, { ok: true, mode: nextMode });
   }
 
@@ -987,7 +445,7 @@ const server = http.createServer(async (req, res) => {
     const workerId = params.get('id');
     const file = params.get('file');
 
-    const w = workers.get(workerId);
+    const w = sessionManager.get(workerId);
     if (!w) return json(res, 404, { error: 'worker not found' });
 
     // Prevent path traversal
@@ -1055,7 +513,7 @@ const server = http.createServer(async (req, res) => {
     const { ok, body } = await parseBody(req);
     if (!ok || !body) return json(res, 400, { error: "invalid request body" });
     const { id } = body;
-    killWorker(id, "Stopped from dashboard (Stop button).");
+    sessionManager.killWorker(id, "Stopped from dashboard (Stop button).");
     return json(res, 200, { ok: true });
   }
 
@@ -1083,19 +541,19 @@ wss.on('connection', (ws, req) => {
       if (msg.type === 'resize') {
         const size = { cols: msg.cols, rows: msg.rows };
         clientSizes.set(ws, size);
-        if (msg.id && workers.has(String(msg.id))) {
-          resizeWorker(String(msg.id), size.cols, size.rows);
+        if (msg.id && sessionManager.has(String(msg.id))) {
+          sessionManager.resizeWorker(String(msg.id), size.cols, size.rows);
         } else {
-          workers.forEach((_, workerId) => {
-            resizeWorker(String(workerId), size.cols, size.rows);
+          sessionManager.forEach((_, workerId) => {
+            sessionManager.resizeWorker(String(workerId), size.cols, size.rows);
           });
         }
       }
       if (msg.type === 'active') {
         const size = clientSizes.get(ws);
         if (size) {
-          workers.forEach((_, workerId) => {
-            resizeWorker(String(workerId), size.cols, size.rows);
+          sessionManager.forEach((_, workerId) => {
+            sessionManager.resizeWorker(String(workerId), size.cols, size.rows);
           });
         }
       }
@@ -1120,181 +578,26 @@ server.on('close', () => {
 });
 
 
-function recoverSessions() {
-  const raw = tmuxExec("ls", "-F", "#{session_name}|#{pane_current_path}|#{pane_current_command}|#{session_id}");
-  if (!raw.trim()) return;
-  const recovered = [];
-  for (const line of raw.trim().split("\n")) {
-    if (!line) continue;
-    const parts = line.split("|");
-    const sessionName = parts[0];
-    const cwd = parts[1] || "unknown";
-    const cmd = parts[2] || "unknown";
-    const tmuxSessionId = parts[3] ? parts[3].trim() : null;
-    if (!sessionName.startsWith("term-")) continue;
-    const id = sessionName.replace("term-", "");
-    const numId = parseInt(id);
-    if (isNaN(numId)) continue;
-    try { sanitizeSessionName(sessionName); } catch { continue; }
-    if (workers.has(id)) continue;
-    workers.set(id, {
-      sessionName,
-      cwd,
-      cmd,
-      logs: [],
-      status: "running",
-      expectedCmd: getBaseCommand(cmd),
-      seenExpectedCmd: false,
-      exitReason: null,
-      lastPaneCommand: null,
-      lastAction: null,
-      tmuxSessionId,
-      sessionAttached: 0,
-    });
-    initializeWorkerMonitorState(workers.get(id));
-    startPolling(id);
-    if (numId >= nextId) nextId = numId + 1;
-    recovered.push(id);
-  }
-  if (recovered.length > 0) {
-    console.log(`♻️  Recovered ${recovered.length} session(s)`);
-    // Broadcast spawned events so already-connected clients (e.g. fast
-    // reconnect after crash-restart) see recovered sessions without a page reload.
-    recovered.forEach(id => {
-      const w = workers.get(id);
-      if (w) broadcast({ type: "spawned", id, fromRecovery: true, cwd: w.cwd, cmd: w.cmd, status: "running", sessionName: w.sessionName, ...getMonitorMeta(w) });
-    });
-  }
-}
+// recoverSessions is now handled inside SessionManager.init().
 
-function startTunnel() {
-  try {
-    execSync("which cloudflared", { stdio: "pipe" });
-  } catch {
-    console.log("☁️  cloudflared not found — skipping tunnel");
-    sendIssueAlert({
-      key: "tunnel-cloudflared-missing",
-      title: "🚨 Tunnel Unavailable",
-      description: "cloudflared is not installed, so external tunnel cannot start.",
-      color: 0xe74c3c,
-      fields: [{ name: "Issue", value: "cloudflared not found in PATH", inline: false }],
-    });
-    return;
-  }
-  tunnelProcess = spawn("cloudflared", ["tunnel", "--url", `http://localhost:${PORT}`], {
-    stdio: ["ignore", "pipe", "pipe"],
-  });
-  tunnelProcess.on("error", (err) => {
-    console.error("☁️  cloudflared tunnel process error:", err.message);
-  });
-  const handleData = (data) => {
-    const text = data.toString();
-    const matches = [...text.matchAll(/https:\/\/([a-z0-9-]+)\.trycloudflare\.com/gi)];
-    const valid = matches.find((m) => m[1] && m[1].toLowerCase() !== "api");
-    if (valid) {
-      const nextUrl = valid[0];
-      if (cachedTunnelUrl === nextUrl) return;
-      const changed = cachedTunnelUrl && cachedTunnelUrl !== nextUrl;
-      cachedTunnelUrl = nextUrl;
-      tunnelUrl = nextUrl;
-      tunnelHealthFailures = 0;
-      if (changed) {
-        console.log(`☁️  Tunnel URL changed → ${tunnelUrl}`);
-      } else {
-        console.log(`☁️  Tunnel URL → ${tunnelUrl}`);
-      }
-      broadcast({ type: "tunnel", url: tunnelUrl });
-      if (DISCORD_WEBHOOK) {
-        fetch(DISCORD_WEBHOOK, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ content: `☁️ NexTmux → ${tunnelUrl}` }),
-        }).catch(() => {});
-      }
-    }
-  };
-  tunnelProcess.stdout.on("data", handleData);
-  tunnelProcess.stderr.on("data", handleData);
-  tunnelProcess.on("close", (code) => {
-    console.log(`☁️  cloudflared exited (code ${code}), restarting in 5s...`);
-    sendIssueAlert({
-      key: `tunnel-exit-${code}`,
-      title: "⚠️ Tunnel Restarted",
-      description: `cloudflared exited with code ${code}. Restarting in 5 seconds.`,
-      color: code === 0 ? 0xf39c12 : 0xe67e22,
-      fields: [
-        { name: "Issue", value: "Tunnel process exited unexpectedly.", inline: false },
-        { name: "Exit Code", value: String(code), inline: true },
-        { name: "Last URL", value: tunnelUrl || cachedTunnelUrl || "unknown", inline: true },
-      ],
-    });
-    tunnelUrl = null;
-    cachedTunnelUrl = null;
-    tunnelProcess = null;
-    tunnelHealthFailures = 0;
-    setTimeout(startTunnel, 5000);
-  });
-}
-
-
-
-function checkTunnel() {
-  if (!cachedTunnelUrl || !tunnelProcess) return;
-  fetch(cachedTunnelUrl, { signal: AbortSignal.timeout(10000), cache: "no-store" })
-    .then(r => {
-      if (!r.ok) throw new Error(r.status);
-      tunnelHealthFailures = 0;
-    })
-    .catch((err) => {
-      tunnelHealthFailures += 1;
-      const reason = err?.cause?.code || err?.code || err?.message || String(err);
-      console.log(`☁️  Tunnel health check failed (${tunnelHealthFailures}/5): ${reason}`);
-      if (tunnelHealthFailures >= 5) {
-        console.log("☁️  Tunnel health check threshold reached, restarting...");
-        const processAlive = tunnelProcess && !tunnelProcess.killed && tunnelProcess.exitCode === null;
-        const uptimeMin = Math.floor(process.uptime() / 60);
-        sendIssueAlert({
-          key: "tunnel-healthcheck-threshold",
-          title: "🚨 Tunnel Healthcheck Failure",
-          description: "5 consecutive tunnel health checks failed. Restarting cloudflared.",
-          color: 0xe74c3c,
-          fields: [
-            { name: "Error", value: reason, inline: false },
-            { name: "Tunnel URL", value: cachedTunnelUrl || "unknown", inline: false },
-            { name: "cloudflared alive", value: processAlive ? "Yes" : "No", inline: true },
-            { name: "Server uptime", value: `${uptimeMin}m`, inline: true },
-          ],
-        });
-        tunnelHealthFailures = 0;
-        if (tunnelProcess) tunnelProcess.kill();
-      }
-    });
-}
+// startTunnel and checkTunnel are now managed by TunnelManager.
 
 server.listen(PORT, () => {
-  recoverSessions();
+  sessionManager.init();
   console.log(`✅ NexTmux running → http://localhost:${PORT}`);
   console.log("🔑 Password is configured via DASHBOARD_PASSWORD");
   console.log(`📺 View tmux session: tmux attach -t term-1`);
   console.log(`👀 AI monitor: ${monitorConfig.enabled ? "enabled" : "disabled"} (poll=${monitorConfig.pollIntervalMs}ms, lines=${monitorConfig.linesToInspect})`);
   console.log(`📨 Telegram alerts: ${telegramService.enabled ? "configured" : "not configured"}`);
-  if (TUNNEL_ENABLED) {
-    startTunnel();
-  } else {
-    console.log("☁️  Tunnel disabled (set ENABLE_TUNNEL=1 or tunnel.enabled=true in config.json to enable)");
-  }
-  if (ENABLE_TUNNEL_HEALTHCHECK) {
-    setInterval(checkTunnel, 60000);
-  } else {
-    console.log("☁️  Tunnel health check disabled (set ENABLE_TUNNEL_HEALTHCHECK=1 to enable)");
-  }
+  
+  tunnelManager.start();
 });
 
 process.on("SIGINT", () => {
-  if (tunnelProcess) tunnelProcess.kill();
+  tunnelManager.stop();
   process.exit();
 });
 process.on("SIGTERM", () => {
-  if (tunnelProcess) tunnelProcess.kill();
+  tunnelManager.stop();
   process.exit();
 });

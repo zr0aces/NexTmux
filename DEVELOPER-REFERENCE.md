@@ -11,7 +11,7 @@
 
 ## Key Functions
 
-### `detectCliType(cmd)` - `server.js:210-218`
+### `detectCliType(cmd)` - `lib/worker.js`
 ```javascript
 detectCliType("claude")  // → "claude"
 detectCliType("codex")   // → "codex"
@@ -195,18 +195,27 @@ npm start
 
 ```
 NexTmux/
-├── server.js                          # Main entry, detectCliType()
+├── server.js                          # HTTP & WebSocket coordinator and router
 ├── lib/
-│   ├── patternEngine.js              # convertCliProfilePatterns()
+│   ├── worker.js                     # I/O-free state machine for a single session
+│   ├── sessionManager.js             # Manages worker maps, recovery, and polling loops
+│   ├── tunnelManager.js              # Manages cloudflared tunnel lifecycle & health checks
+│   ├── tmuxService.js                # Shell subprocess executions & safe inputs
+│   ├── paneInfoParser.js             # Parses bulk list-panes stdout into Map
+│   ├── patternEngine.js              # convertCliProfilePatterns() & reset parsing
 │   ├── messageProcessor.js           # resolveAutoResponse(cliProfile)
 │   ├── sessionStateManager.js        # resetAtEpochMs (from Phase 1)
 │   └── watcherEngine.js
 ├── public/
 │   ├── js/
-│   │   ├── workers.js                # UI updates for metadata
+│   │   ├── store.js                  # Client-side WorkerState store (Event emitter)
+│   │   ├── workers.js                # UI updates reacting to store changes
 │   │   └── app.js
 │   └── style.css
 ├── tests/
+│   ├── worker.test.js                # Unit tests for Worker module
+│   ├── sessionManager.test.js        # Unit tests for SessionManager
+│   ├── tunnelManager.test.js         # Unit tests for TunnelManager
 │   ├── cli-detection.test.js         # Phase 1 tests
 │   ├── patternEngine.test.js
 │   ├── messageProcessor.test.js
