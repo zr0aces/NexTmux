@@ -136,14 +136,15 @@ function ensureCard(id, cwd, status, logs, cmd, reason, monitorMeta) {
           '<div class="tk-label">Keys</div>' +
           '<div class="key-grid">' +
             '<button class="key-btn" id="key-esc-' + id + '">esc</button>' +
+            '<button class="key-btn" id="key-ctrlc-' + id + '">⌃c</button>' +
             '<button class="key-btn" id="key-up-' + id + '">↑</button>' +
             '<button class="key-btn" id="key-down-' + id + '">↓</button>' +
-            '<button class="key-btn key-enter" id="key-enter-' + id + '">↵</button>' +
             '<button class="key-btn" id="key-tab-' + id + '">tab</button>' +
             '<button class="key-btn" id="key-stab-' + id + '">⇧tab</button>' +
-            '<button class="key-btn" id="key-ctrlc-' + id + '">⌃c</button>' +
-            '<button class="key-btn quick-cmd-btn" id="quick-proceed-' + id + '">proceed</button>' +
+            '<button class="key-btn key-enter" id="key-enter-' + id + '">↵</button>' +
             '<button class="key-btn quick-cmd-btn" id="quick-continue-' + id + '">continue</button>' +
+            '<button class="key-btn quick-cmd-btn" id="quick-proceed-' + id + '">proceed</button>' +
+            '<div style="grid-column: span 2"></div>' +
             '<button class="key-btn quick-cmd-btn" id="quick-yes-' + id + '">yes</button>' +
           '</div>' +
         '</div>' +
