@@ -71,6 +71,8 @@ Config files: `.env` (PORT, DASHBOARD_PASSWORD, TELEGRAM_BOT_TOKEN, etc.), `conf
 - API endpoints: `/api/{resource}`
 - DOM element IDs: `{type}-{id}` (e.g. `card-1`, `logs-1`, `inp-1`)
 - Static files served from `public/`
-- Midnight-Cyan Glassmorphic theme colors (electric cyan `#06b6d4`, dark void `#04060a`, translucent cards, fonts: Outfit + JetBrains Mono)
+- Midnight-Orange Glassmorphic theme colors (cyber-orange `#ff6b21`, dark void `#04060a`, translucent cards, fonts: Outfit + JetBrains Mono)
 - Config precedence: env var → `config.json` → hardcoded default (see `buildMonitorConfig`)
 - `state/session-state.json` is auto-created at runtime; gitignored
+- Documentation Sync: Review and update all relevant docs (`CLAUDE.md`, guides under `docs/`) immediately after completing any refactor, revision, feature, bug fix, or repo changes to keep files synchronized.
+

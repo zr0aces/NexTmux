@@ -10,3 +10,5 @@ When working in this repository, follow these developer guidelines to maintain c
 - **Single Source of Truth**: Refer to the `VERSION` file for the current project release version. Never hardcode version strings.
 - **Configuration Precedence**: Environment variables in `.env` override values in `config.json`, which in turn override defaults.
 - **Relative Pathing**: Avoid absolute hardcoding of workspace paths on the server. Always resolve relative to `__dirname`.
+- **Documentation Synchronization**: Always review and update all relevant documentation (including `CLAUDE.md` and guides under `docs/`) immediately after completing any refactor, revision, feature implementation, bug fix, or repository change to keep it accurate, consistent, and synchronized.
+
