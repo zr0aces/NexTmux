@@ -144,7 +144,7 @@ function ensureCard(id, cwd, status, logs, cmd, reason, monitorMeta) {
             '<button class="key-btn key-enter" id="key-enter-' + id + '">↵</button>' +
             '<button class="key-btn quick-cmd-btn" id="quick-continue-' + id + '">continue</button>' +
             '<button class="key-btn quick-cmd-btn" id="quick-proceed-' + id + '">proceed</button>' +
-            '<div style="grid-column: span 2"></div>' +
+            '<div class="key-spacer"></div>' +
             '<button class="key-btn quick-cmd-btn" id="quick-yes-' + id + '">yes</button>' +
           '</div>' +
         '</div>' +
