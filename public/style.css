@@ -1140,9 +1140,9 @@ header h1 {
   position: absolute;
   bottom: calc(100% + 8px);
   right: 0;
-  background: rgba(8, 12, 21, 0.98);
-  backdrop-filter: var(--glass-blur);
-  -webkit-backdrop-filter: var(--glass-blur);
+  background: rgba(9, 13, 22, 0.72);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
   border: 1px solid var(--border-color);
   border-radius: 12px;
   padding: 12px;
@@ -1839,9 +1839,9 @@ header h1 {
     right: 8px;
     width: auto;
     border-radius: 12px;
-    background: rgba(9, 13, 22, 0.82);
-    backdrop-filter: blur(16px);
-    -webkit-backdrop-filter: blur(16px);
+    background: rgba(9, 13, 22, 0.65);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
     padding: 6px 10px;
     border: 1px solid rgba(255, 107, 33, 0.15);
     box-shadow: 0 -4px 24px rgba(0, 0, 0, 0.6);
