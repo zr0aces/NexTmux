@@ -111,6 +111,9 @@ function setLayout(mode) {
   syncCardPlacement();
 
   const effLayout = getEffectiveLayout();
+  document.body.classList.toggle('layout-tab', effLayout === 'tab');
+  document.body.classList.toggle('layout-split', effLayout === 'split');
+  
   document.getElementById('tab-mode').style.display = effLayout === 'tab' ? 'flex' : 'none';
   document.getElementById('split-mode').style.display = effLayout === 'split' ? 'flex' : 'none';
   document.getElementById('split-content').style.display = effLayout === 'split' ? 'grid' : 'none';
@@ -123,6 +126,9 @@ function setLayout(mode) {
 window.addEventListener('resize', () => {
   syncCardPlacement();
   const effLayout = getEffectiveLayout();
+  document.body.classList.toggle('layout-tab', effLayout === 'tab');
+  document.body.classList.toggle('layout-split', effLayout === 'split');
+  
   const tabModeEl = document.getElementById('tab-mode');
   const splitModeEl = document.getElementById('split-mode');
   const splitContentEl = document.getElementById('split-content');
