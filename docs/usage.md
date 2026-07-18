@@ -40,11 +40,12 @@ This will spawn an isolated tmux session named `term-{id}` (e.g., `term-1`) runn
 ### Step 3: Manage Active Workflows
 - **Terminal Logs & Scroll Lock**: Watch live output streaming directly from the active tmux pane inside the high-density log viewer. If you scroll up to inspect previous output, the log view automatically locks its scroll position so new log lines do not jar or force-scroll your view. Scrolling back to the bottom automatically unlocks and resumes auto-scroll.
 - **Command Input**: Type commands inside the lower prompt input field and press **Send** (or Enter) to feed them straight into the tmux stdin.
-- **Mechanical Toolkit (Keyboard Icon)**: Click the **⌨** keyboard button to reveal standard key shortcuts (`esc`, `↑`, `↓`, `↵`, `tab`, `⇧tab`, `⌃c`) plus quick command buttons (`proceed`, `continue`, `yes`) for fast manual interaction.
-- **Git Diff Inspector**: Click the **Diff** action pill on any session card to review real-time git state and inspect local changes in that worker's active directory.
-- **Tab & Split Views**: Toggle between **Tab** view (for clean, focused, single-pane work) and **Split** view (to monitor multiple concurrent terminal tasks side-by-side).
-- **Persistent Tab Selection**: The active session tab is saved to `localStorage`. After a page refresh or server restart, the dashboard restores the previously selected session automatically — recovery does not hijack your current view.
-- **tmux Attached Indicator**: A green ring appears on the tab dot and AI state badge whenever a native tmux client is actively attached to that session (e.g. after running `tmux attach -t term-1`). The indicator updates within 3 seconds of attach or detach.
+- **Mechanical Toolkit (Keyboard Icon)**: Click the **⌨** keyboard button to reveal standard key shortcuts (`esc`, `↑`, `↓`, `↵`, `tab`, `⇧tab`, `⌃c`) plus quick command buttons (`proceed`, `continue`, `yes`) for fast manual interaction. On mobile, this expands to a full-width toolbar dock docked neatly at the bottom of the screen.
+- **Git Diff Inspector**: Click the **Diff** action pill on any session card to review real-time git state. On mobile, this and other advanced maintenance operations (such as resetting height and state) are tucked into the **⋯** (More actions) menu which slides up a native-feeling bottom action drawer.
+- **Tab & Split Views**: Toggle between **Tab** view (for focused single-pane work) and **Split** view (to monitor multiple concurrent terminal tasks side-by-side). On mobile viewports, the interface automatically forces a clean single-tab capsule layout.
+- **Unified Header Tabs**: For maximum console height on desktop, tabs are embedded directly into the header bar alongside the branding. On mobile, the tabs gracefully wrap into a dedicated, swipeable capsule pill track just below the header.
+- **Persistent Tab Selection**: The active session tab is saved to `localStorage`. After a page refresh or server restart, the dashboard restores the previously selected session automatically.
+- **tmux Attached Indicator**: A colored ring appears on the tab dot and AI state badge whenever a native tmux client is actively attached to that session (e.g. after running `tmux attach -t term-1`). The indicator updates within 3 seconds of attach or detach.
 
 ---
 
