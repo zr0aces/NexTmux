@@ -1839,14 +1839,14 @@ header h1 {
   .toolkit-popup {
     position: fixed;
     bottom: 50px;
-    left: 8px;
+    left: auto;
     right: 8px;
-    width: auto;
-    border-radius: 12px;
-    background: rgba(9, 13, 22, 0.65);
+    width: 180px;
+    border-radius: 8px;
+    background: rgba(9, 13, 22, 0.72);
     backdrop-filter: blur(12px);
     -webkit-backdrop-filter: blur(12px);
-    padding: 6px 10px;
+    padding: 8px;
     border: 1px solid rgba(255, 107, 33, 0.15);
     box-shadow: 0 -4px 24px rgba(0, 0, 0, 0.6);
   }
@@ -1857,7 +1857,7 @@ header h1 {
 
   .key-grid {
     width: 100%;
-    grid-template-columns: repeat(6, 1fr);
+    grid-template-columns: repeat(4, 1fr);
     gap: 4px;
   }
 
@@ -1871,24 +1871,6 @@ header h1 {
     font-size: 11px;
     grid-column: span 2;
   }
-
-  /* Ergononic ordering to keep high-frequency keys right-aligned on mobile */
-  .key-grid [id^="key-esc-"] { order: 1; }
-  .key-grid [id^="key-ctrlc-"] { order: 2; }
-  .key-grid [id^="key-tab-"] { order: 3; }
-  .key-grid [id^="key-stab-"] { order: 4; }
-  .key-grid [id^="key-up-"] { order: 5; }
-  .key-grid [id^="key-down-"] { order: 6; }
-  
-  .key-grid [id^="quick-continue-"] { order: 7; }
-  .key-grid [id^="quick-proceed-"] { order: 8; }
-  .key-grid [id^="key-enter-"] { order: 9; }
-  
-  .key-grid .key-spacer {
-    order: 10;
-    grid-column: span 4;
-  }
-  .key-grid [id^="quick-yes-"] { order: 11; }
 }
 
 /* ── More Actions Bottom Sheet Drawer ───────────────── */
