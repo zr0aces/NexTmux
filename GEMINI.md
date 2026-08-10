@@ -1,6 +1,4 @@
-# CLAUDE.md
-
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+# GEMINI.md
 
 ## Project Overview
 
@@ -12,6 +10,7 @@ NexTmux is a web dashboard for managing multiple terminal sessions via tmux. Sup
 npm install          # Install dependencies
 npm start            # Start server (default port: 8081)
 npm run setup        # Guided setup + launchd service registration (macOS)
+npm test             # node --test over tests/*.test.js
 
 # Docker alternative
 docker compose up -d
@@ -21,7 +20,7 @@ Config files: `.env` (PORT, DASHBOARD_PASSWORD, TELEGRAM_BOT_TOKEN, etc.), `conf
 
 ## Architecture
 
-**Server (`server.js`):** Node.js HTTP + WebSocket server (~500 lines). Acts strictly as a coordinator and request/event router, delegating all worker operations, timer polling, and tunnels to lib/ services.
+**Server (`server.js`):** Node.js HTTP + WebSocket server. Acts strictly as a coordinator and request/event router, delegating all worker operations, timer polling, and tunnels to lib/ services.
 
 **Client (`index.html` + `public/`):** Single HTML entry point; all CSS/JS in `public/`. Tab/Split dual layout modes. Real-time updates via WebSocket. localStorage for user preferences.
 
@@ -36,6 +35,8 @@ Config files: `.env` (PORT, DASHBOARD_PASSWORD, TELEGRAM_BOT_TOKEN, etc.), `conf
 - `git-diff.js` — Git diff side-panel (uses diff2html from CDN)
 
 **lib/ modules (server-side):**
+- `authService.js` — Session tokens, cookie building, timing-safe password match, per-IP login rate limiting.
+- `messageProcessor.js` — Inspects captured output tail: parses selectable prompt options, classifies prompts, resolves auto-responses per CLI profile.
 - `worker.js` — State machine for a single worker (CWD, dims, logs, AI status, reset times). Fully I/O-free and unit-testable.
 - `sessionManager.js` — Orchestrates active worker Map, poll loops scheduling, recovery, and executes tmux commands.
 - `tunnelManager.js` — Manages cloudflared subprocess, extracts URL, loops health checks, and handles auto-restarts.
@@ -74,7 +75,22 @@ Config files: `.env` (PORT, DASHBOARD_PASSWORD, TELEGRAM_BOT_TOKEN, etc.), `conf
 - Midnight-Orange Glassmorphic theme colors (cyber-orange `#ff6b21`, dark void `#04060a`, translucent cards, fonts: Outfit + JetBrains Mono)
 - Config precedence: env var → `config.json` → hardcoded default (see `buildMonitorConfig`)
 - `state/session-state.json` is auto-created at runtime; gitignored
-- Documentation Sync: Review and update all relevant docs (`CLAUDE.md`, guides under `docs/`) immediately after completing any refactor, revision, feature, bug fix, or repo changes to keep files synchronized.
+
+## Deeper docs
+
+Read the matching doc before acting on that branch:
+
+| Read when | Doc |
+|---|---|
+| Writing or reviewing any code | `docs/coding-standards.md` |
+| Needing module contracts, API surface, or data flow in full | `docs/technical_spec.md` |
+| Touching patterns, watcher states, or Telegram alerts | `docs/ai_monitoring.md` |
+| Adding or debugging a non-`claude` CLI profile | `docs/multi-cli-support.md`, then `DEVELOPER-REFERENCE.md` |
+| Changing install, `.env`, `config.json`, or Docker | `docs/installation.md` |
+| Changing dashboard behavior users see | `docs/usage.md` |
+| Setting up the local dev loop | `docs/development.md` |
+
+After any refactor, feature, fix, or repo change: update `CLAUDE.md`, `AGENTS.md`, and `GEMINI.md` (kept identical except for the agent-workflow section, which only the non-Claude copies carry), plus every doc above the change invalidates.
 
 ## 🛠️ UNIFIED AI WORKFLOW (Graphify, RTK, Caveman, Claude-Mem)
 
